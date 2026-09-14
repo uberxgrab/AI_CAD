@@ -1,0 +1,2 @@
+{"segment_id": "SEG000001", "handle": "2F", "layer": "HVAC", "length": 10.0, "angle": 0.0, "node_start_degree": 1, "node_end_degree": 1, "component_size": 2, "distance_to_nearest_node": 30.0, "is_flagged": true, "has_crossing": false}
+{"segment_id": "SEG000002", "handle": "30", "layer": "HVAC", "length": 10.0, "angle": 0.0, "node_start_degree": 1, "node_end_degree": 1, "component_size": 2, "distance_to_nearest_node": 20.0, "is_flagged": true, "has_crossing": false}

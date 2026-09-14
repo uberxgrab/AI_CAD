@@ -1,0 +1,113 @@
+[
+  {
+    "error_id": "OPEN_ENDPOINT:N:0.0:0.0",
+    "error_type": "OPEN_ENDPOINT",
+    "severity": "high",
+    "message": "Endpoint has no matching continuation in the HVAC network.",
+    "suggested_fix": "Connect this endpoint to the intended trunk or verify a missing duct segment.",
+    "entity_handles": [
+      "2F"
+    ],
+    "segment_ids": [
+      "SEG000001"
+    ],
+    "location": {
+      "x": 0.0,
+      "y": 0.0
+    },
+    "rule_name": "detect_open_endpoints",
+    "debug_features": {
+      "node_degree": 1,
+      "layer": "HVAC"
+    }
+  },
+  {
+    "error_id": "OPEN_ENDPOINT:N:10.0:0.0",
+    "error_type": "OPEN_ENDPOINT",
+    "severity": "high",
+    "message": "Endpoint has no matching continuation in the HVAC network.",
+    "suggested_fix": "Connect this endpoint to the intended trunk or verify a missing duct segment.",
+    "entity_handles": [
+      "2F"
+    ],
+    "segment_ids": [
+      "SEG000001"
+    ],
+    "location": {
+      "x": 10.0,
+      "y": 0.0
+    },
+    "rule_name": "detect_open_endpoints",
+    "debug_features": {
+      "node_degree": 1,
+      "layer": "HVAC"
+    }
+  },
+  {
+    "error_id": "OPEN_ENDPOINT:N:30.0:0.0",
+    "error_type": "OPEN_ENDPOINT",
+    "severity": "high",
+    "message": "Endpoint has no matching continuation in the HVAC network.",
+    "suggested_fix": "Connect this endpoint to the intended trunk or verify a missing duct segment.",
+    "entity_handles": [
+      "30"
+    ],
+    "segment_ids": [
+      "SEG000002"
+    ],
+    "location": {
+      "x": 30.0,
+      "y": 0.0
+    },
+    "rule_name": "detect_open_endpoints",
+    "debug_features": {
+      "node_degree": 1,
+      "layer": "HVAC"
+    }
+  },
+  {
+    "error_id": "OPEN_ENDPOINT:N:40.0:0.0",
+    "error_type": "OPEN_ENDPOINT",
+    "severity": "high",
+    "message": "Endpoint has no matching continuation in the HVAC network.",
+    "suggested_fix": "Connect this endpoint to the intended trunk or verify a missing duct segment.",
+    "entity_handles": [
+      "30"
+    ],
+    "segment_ids": [
+      "SEG000002"
+    ],
+    "location": {
+      "x": 40.0,
+      "y": 0.0
+    },
+    "rule_name": "detect_open_endpoints",
+    "debug_features": {
+      "node_degree": 1,
+      "layer": "HVAC"
+    }
+  },
+  {
+    "error_id": "DISCONNECTED_CLUSTER:1",
+    "error_type": "DISCONNECTED_CLUSTER",
+    "severity": "high",
+    "message": "A disconnected duct cluster was found outside the main HVAC network.",
+    "suggested_fix": "Check for missing connecting segments, layer mismatches, or accidental detached geometry.",
+    "entity_handles": [
+      "30"
+    ],
+    "segment_ids": [
+      "SEG000002"
+    ],
+    "location": {
+      "x": 35.0,
+      "y": 0.0
+    },
+    "rule_name": "detect_disconnected_components",
+    "debug_features": {
+      "component_edges": 1,
+      "component_total_length": 10.0,
+      "main_component_nodes": 2
+    }
+  }
+]

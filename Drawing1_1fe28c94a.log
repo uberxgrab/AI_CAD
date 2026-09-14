@@ -1,0 +1,20 @@
+[ AutoCAD - Thu Apr 16 17:21:28 2026  ]----------------------------------------
+Regenerating model.
+
+**** System Variable Changed ****
+3 of the monitored system variables have changed from the preferred value. Use SYSVARMONITOR command to view changes.
+
+
+  Loading HVAC15------You can use right now HVAC15, (D) HVAC15 - 2018
+; error: bad argument type: VLA-OBJECT nil
+
+AutoCAD menu utilities loaded.
+  Loading HVAC15------You can use right now HVAC15, (D) HVAC15 - 2018
+; error: bad argument type: VLA-OBJECT nil
+
+Command: 
+Command: 
+
+Command: 
+Command: _XCOMPAREBAKCLEAN
+

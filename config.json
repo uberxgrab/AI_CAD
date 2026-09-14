@@ -1,0 +1,18 @@
+{
+  "snap_tolerance": 50.0,
+  "snap_warning_distance": 250.0,
+  "min_segment_length": 5.0,
+  "overlap_tolerance": 1.0,
+  "crossing_tolerance": 5.0,
+  "component_min_size": 1,
+  "main_component_strategy": "longest_total_length",
+  "annotation_layer": "HVAC_ERRORS",
+  "annotation_text_height": 120.0,
+  "annotation_marker_radius": 75.0,
+  "precision_digits": 3,
+  "allowed_open_endpoint_layers": [],
+  "include_layers": [],
+  "exclude_layers": [],
+  "loop_max_perimeter": 1500.0,
+  "loop_max_nodes": 6
+}
