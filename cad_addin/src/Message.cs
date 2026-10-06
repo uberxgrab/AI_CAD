@@ -10,8 +10,8 @@ namespace HvacAiCadAddin
         public void Hello()
         {
             Document doc = Application.DocumentManager.MdiActiveDocument;
-            Editor editor = doc?.Editor;
-            editor?.WriteMessage("\nHello from HVAC AI!");
+            Editor ed = doc?.Editor;
+            ed?.WriteMessage("\nHello from HVAC AI!");
         }
     }
 }

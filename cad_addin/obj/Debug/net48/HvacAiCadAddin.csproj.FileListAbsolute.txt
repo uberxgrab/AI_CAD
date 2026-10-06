@@ -5,3 +5,6 @@ C:\Users\Admin\hvac_ai\cad_addin\obj\Debug\net48\HvacAiCadAddin.GeneratedMSBuild
 C:\Users\Admin\hvac_ai\cad_addin\obj\Debug\net48\HvacAiCadAddin.csproj.CoreCompileInputs.cache
 C:\Users\Admin\hvac_ai\cad_addin\obj\Debug\net48\HvacAiCadAddin.dll
 C:\Users\Admin\hvac_ai\cad_addin\obj\Debug\net48\HvacAiCadAddin.pdb
+C:\Users\Admin\hvac_ai\cad_addin\obj\Debug\net48\HvacAiCadAddin.sourcelink.json
+C:\Users\Admin\hvac_ai\cad_addin\.tmp_stretch_build\HvacAiCadAddin.dll
+C:\Users\Admin\hvac_ai\cad_addin\.tmp_stretch_build\HvacAiCadAddin.pdb

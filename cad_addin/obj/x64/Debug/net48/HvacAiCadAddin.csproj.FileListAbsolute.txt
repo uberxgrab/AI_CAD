@@ -1,0 +1,8 @@
+C:\Users\Admin\hvac_ai\cad_addin\bin\x64\Debug\net48\HvacAiCadAddin.dll
+C:\Users\Admin\hvac_ai\cad_addin\bin\x64\Debug\net48\HvacAiCadAddin.pdb
+C:\Users\Admin\hvac_ai\cad_addin\obj\x64\Debug\net48\HvacAiCadAddin.csproj.AssemblyReference.cache
+C:\Users\Admin\hvac_ai\cad_addin\obj\x64\Debug\net48\HvacAiCadAddin.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Admin\hvac_ai\cad_addin\obj\x64\Debug\net48\HvacAiCadAddin.csproj.CoreCompileInputs.cache
+C:\Users\Admin\hvac_ai\cad_addin\obj\x64\Debug\net48\HvacAiCadAddin.sourcelink.json
+C:\Users\Admin\hvac_ai\cad_addin\obj\x64\Debug\net48\HvacAiCadAddin.dll
+C:\Users\Admin\hvac_ai\cad_addin\obj\x64\Debug\net48\HvacAiCadAddin.pdb
