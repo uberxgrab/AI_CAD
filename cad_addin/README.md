@@ -32,6 +32,17 @@ The resulting assembly is `bin\x64\Release\HvacAiCadAddin.dll`. The `Debug|x64` 
 2. Run `HVACAI` to invoke the main command, which obtains the active `Document`,
    its `Database`, and its `Editor`.
 3. Run `ME` to write `Hello from HVAC AI!` to AutoCAD's command line.
+4. Run `HVACQTO` to select a Crossing area and export an Excel-compatible XML
+   workbook with equipment, duct, chilled-water pipe, and assumptions sheets.
+
+`HVACQTO` includes block attributes and dynamic-property values in the equipment
+sheet so available cooling capacity, head, and similar metadata are retained.
+Dynamic blocks with a `Distance3` property and a block name containing a size
+such as `600x300` or `D250` are reported as ducts. Duct surface area uses the
+rectangular perimeter or circular circumference multiplied by `Distance3`.
+Line and polyline lengths are grouped by layer. The export assumes drawing units
+are millimetres and converts lengths to metres and surface areas to square
+metres. Review the assumptions sheet when drawings use another unit convention.
 
 ## Integration boundary
 
