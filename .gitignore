@@ -1,0 +1,11 @@
+# Test scratch output (tests/test_pipeline.py)
+.tmp_test_runs/
+
+# Add-in build output
+cad_addin/bin/
+cad_addin/obj/
+cad_addin/.tmp_stretch_obj/
+
+# Python
+__pycache__/
+venv/

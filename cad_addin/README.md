@@ -32,17 +32,45 @@ The resulting assembly is `bin\x64\Release\HvacAiCadAddin.dll`. The `Debug|x64` 
 2. Run `HVACAI` to invoke the main command, which obtains the active `Document`,
    its `Database`, and its `Editor`.
 3. Run `ME` to write `Hello from HVAC AI!` to AutoCAD's command line.
-4. Run `HVACQTO` to select a Crossing area and export an Excel-compatible XML
-   workbook with equipment, duct, chilled-water pipe, and assumptions sheets.
+4. Select objects, then run `HVACQTO`, or run it and select objects when prompted.
+   In the settings dialog, set the contingency factor, the duct sheet thickness
+   table, and any shaft risers the drawing does not show. Then choose where to save
+   the Excel-compatible XML workbook. The dialog remembers the last values.
 
-`HVACQTO` includes block attributes and dynamic-property values in the equipment
-sheet so available cooling capacity, head, and similar metadata are retained.
-Dynamic blocks with a `Distance3` property and a block name containing a size
-such as `600x300` or `D250` are reported as ducts. Duct surface area uses the
-rectangular perimeter or circular circumference multiplied by `Distance3`.
-Line and polyline lengths are grouped by layer. The export assumes drawing units
-are millimetres and converts lengths to metres and surface areas to square
-metres. Review the assumptions sheet when drawings use another unit convention.
+`HVACQTO` writes one main sheet laid out like the VRV quotation template, with
+equipment, ducts, and pipes as groups, plus a duct appendix sheet. Only the
+description, unit, and quantity columns are filled. Prices, product codes, notes,
+and project details stay empty.
+
+Duct and pipe quantities are Excel formulas, for example `=(12.345+3.2+3.5*2)*R6C6`
+for a pipe with two drawn segments and two 3.5 m shaft runs. Every such formula
+multiplies by the contingency factor in cell `F6` of the main sheet, so editing
+that cell updates the BOQ. A row with too many segments for one Excel formula is
+listed segment by segment on an extra `PHU LUC DOAN ONG` sheet.
+
+Dynamic blocks with a positive `Distance3` and a block name containing a size such
+as `600x300`, `D250`, or `Ø250` are ducts. Duct area uses the rectangular perimeter
+or circular circumference multiplied by `Distance3`. The main sheet totals that
+area per sheet thickness, and the appendix lists each size with its count, length,
+and area.
+
+Lines and polylines are classified by layer, first match wins:
+
+| Layer contains | Exported as |
+| --- | --- |
+| `CHWS`, `CHWR`, `HWS`, `HWR` | Galvanized welded steel pipe, SCH40 |
+| A pair such as `15.9/9.5` or `RP 15.9-9.5` | Copper pipe, with the full length added to both sizes |
+| `CONDENSATED`, or a symbol such as `D34` or `DN50` | uPVC Class 1 condensate pipe |
+
+Other layers are not exported, and the command line reports them. A hyphen pair
+counts as copper only after `RP`, and text in parentheses is ignored, so
+`EIA_1 RP 28.6-12.7 (33.6-44.8)` gives sizes 28.6 and 12.7.
+
+The export assumes drawing units are millimetres and converts lengths to metres
+and surface areas to square metres.
+
+AutoCAD keeps a loaded add-in until it exits, so restart AutoCAD before you
+`NETLOAD` a rebuilt DLL.
 
 ## Integration boundary
 
