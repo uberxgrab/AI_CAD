@@ -160,9 +160,14 @@ Do not reverse these without discussing it with the user.
   property values and insertion points, restore them when STRETCH ends or
   cancels, then commit the final property change after a successful STRETCH.
 - Choose the dynamic stretch axis by projecting the drag vector onto the block's
-  local X and Y axes. Take bounds from `BlockReference.GeometricExtents`, not the
-  block definition, because dynamic blocks can use anonymous definitions after
-  actions run.
+  local X and Y axes. Take bounds from the visible entities of the reference's
+  current block record (its anonymous representation), measured in block
+  coordinates and projected through `BlockTransform`
+  (`DynamicBlockHelpers.TryGetDisplayedProjectionRange`). Do not use
+  `BlockReference.GeometricExtents`: it includes the 41 invisible fixed 3000-long
+  polylines in the `REC_`/`Round D` duct blocks, and is a world-aligned box that is
+  too wide for rotated references. It is only the fallback when nothing visible can
+  be measured. The previous behaviour is tagged `hvacstretch-before-s1`.
 - Detect which end is crossed by projecting the Crossing rectangle and block
   extents onto the chosen axis. After changing the distance property, align the
   unselected end back to its original projection to keep it fixed.
@@ -240,6 +245,74 @@ _.DXFOUT
 _.QUIT
 _Y
 ```
+
+### Running add-in code headless
+
+Non-interactive add-in code (block import, `Distance3`, curve splitting, layer
+import) can be tested in `accoreconsole` on a copy of a drawing. Jigs,
+`PointMonitor`, transient graphics, osnap and typed input cannot; test those by
+hand in AutoCAD.
+
+- The test DLL may reference only `acdbmgd.dll` and `accoremgd.dll`, never
+  `acmgd.dll`.
+- Always pass `/isolate <userid> <folder>`. SECURELOAD and TRUSTEDPATHS are stored
+  in the registry and shared with the user's AutoCAD, and `/isolate` redirects
+  those writes. Even then, set `SECURELOAD 0` before `NETLOAD` and `SECURELOAD 1`
+  before `_.QUIT`; otherwise the 0 persists in the isolated profile and the user's
+  startup LISP loads.
+- Wrap every `[CommandMethod]` body in try/catch. An unhandled exception kills
+  `accoreconsole` and truncates the log.
+- Stdout is UTF-16, so write results to your own log file.
+
+```powershell
+& "C:\Program Files\Autodesk\AutoCAD 2023\accoreconsole.exe" /isolate hvactest "C:\scratch\iso" /i C:\scratch\copy.dwg /s C:\scratch\run.scr /l en-US
+```
+
+## AutoCAD API facts verified on the template
+
+Each of these was checked in `accoreconsole` on a copy of `CAD/MEP_DWT_3.dwg`.
+
+- **Block names.** In a live database, the template's dynamic definitions have
+  their real names, so `bt["REC_600x300"]` works and `DynamicBlockTableRecord.Name`
+  is `REC_600x300`. Only DXF readers see `*U544`; they need the
+  `AcDbDynamicBlockTrueName` xdata.
+- **Duct blocks.** Every `REC_*`/`Round D*` block has one parameter, `Distance3`,
+  along local +X from the base point (the duct start on the centreline).
+  - The visible outline is one closed LWPOLYLINE, W wide (±W/2), where W is the
+    first number in the name.
+  - The block also holds 41 invisible polylines fixed at 3000 long, so do not use
+    `GeometricExtents`.
+  - 61 template inserts are mirrored (X scale -1).
+- **Setting dynamic properties.** Call `AppendEntity`, then
+  `AddNewlyCreatedDBObject`, then set the dynamic property. A property set
+  before `AppendEntity` is silently ignored.
+- **New duct sizes.**
+  - Clone the master into a `new Database(true, true)` with `WblockCloneObjects`.
+  - Rename it there; AutoCAD rewrites the TrueName xdata itself.
+  - Move the visible outline's vertices with `SetPointAt`, keeping the vertex
+    count and order.
+  - Clone it back with `DuplicateRecordCloning.Ignore`.
+
+  The copy stays dynamic and independent after save and reopen. Use
+  `TemplateSource` (`cad_addin/src/TemplateImport.cs`) to import blocks and layers.
+  Imported layers bring their custom linetypes and text styles with them.
+- **Side databases.** Call `entity.SetDatabaseDefaults(db)` before setting
+  properties on an entity meant for a side database. Setting `Layer` by name
+  resolves against the working database and later fails with `eWrongDatabase`.
+- **`GetSplitCurves`.**
+  - The pieces keep layer, colour, linetype, xdata, elevation, widths and bulges.
+  - The pieces are not in the database; append them yourself.
+  - Sort the parameters first, or the pieces overlap.
+  - `GetParameterAtPoint` throws unless the point is within about 1e-10 of the
+    curve, so call `GetClosestPointTo` first.
+- **`IntersectWith` is not usable for connectivity.**
+  - Its gap tolerance grows with coordinate size: 1e-4 at the origin, 0.03 at the
+    template's 4e6.
+  - It returns no point for collinear touching or overlapping segments.
+  - The point it returns lies on only one of the two curves.
+
+  Use endpoint-distance checks with an explicit tolerance instead.
+- **Undo.** One command is one undo group, however many transactions it commits.
 
 ## Known pitfalls
 
