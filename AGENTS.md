@@ -338,6 +338,245 @@ This mapping is not approved. Confirm each pair with the user.
 - **Rule for all of these:** only print lines whose values exist in the drawing.
   Never invent COP, refrigerant, motor, or start method.
 
+## Drafting commands: `HVACDUCT`, `HVACDUCTALIGN`, `HVACPIPESIZE`, `HVACREFRIG`
+
+The user approved this spec on 2026-11-18. Read the "AutoCAD API facts verified on
+the template" section of `CLAUDE.md` first. Units are drawing millimetres.
+
+### Shared rules
+
+- **File layout.** Follow the `HVACQTO` split.
+  - **AutoCAD-free core:** plain doubles only, no `Point3d`; tested by a console
+    project under `tests/<Name>/`, built like `tests/HvacQtoCoreTests`.
+  - **Non-interactive AutoCAD classes:** need only `acdbmgd`/`accoremgd`, so a
+    headless `accoreconsole` test DLL can link them.
+  - **Thin command classes:** prompts, dialogs, jig or preview.
+- **Template.** Blocks and layers come from `CAD/MEP_DWT_3.dwg` through
+  `TemplateSource` and `TemplateLocator` (`cad_addin/src/TemplateImport.cs`). Never
+  hard-code the path.
+- **Fitting tag.** Generated fittings are closed LWPOLYLINEs on the duct's system
+  layer, with colour and linetype ByLayer. They are not blocks.
+  - Tag every one with xdata: registered app `HVACAI_FITTING`, then 1000 = the kind
+    (`ELBOW`, `TRANSITION`, `TAP`), then 1000 = a size text.
+  - `HVACQTO` will skip curves that carry this app.
+- **Duct references.** A duct is a `BlockReference` whose
+  `DynamicBlockTableRecord` name is `REC_<W>x<H>` or `Round D<d>`.
+  - Start = `Position`.
+  - Axis = `BlockTransform` X axis, normalised. This also holds for mirrored
+    inserts.
+  - Length = `Distance3` × X scale length.
+  - Plan width = W or d.
+  - Use `DynamicBlockHelpers` to get and set `Distance3` and to measure bounds.
+- **Undo.** Each command is one undo group. Esc must leave nothing half-written.
+- **Do not edit** `HvacQuantityTakeoff*.cs`, `HvacStretch.cs`, `TakeoffSettingsForm.cs`
+  or `TQO.cs`; the coordinator owns those.
+  - `DynamicBlockHelpers.cs` and `TemplateImport.cs` may only gain new members;
+    keep existing signatures and behaviour.
+  - Only the pipe stream may add to `TemplateImport.cs`.
+- **Settings.** Dialogs remember their last values in
+  `%APPDATA%\HvacAiCadAddin\<COMMAND>.settings`, like `TakeoffSettingsForm`.
+
+### Fitting dimensions (defaults; all adjustable in the dialogs)
+
+W is the plan width and d the round diameter. ΔW and ΔH are the size changes.
+
+| Fitting | Rule |
+| --- | --- |
+| Rectangular elbow | Centreline R = 0.75·W (inner 0.25·W, outer 1.25·W); the user's template habit. Takeup per leg = R·tan(θ/2). Outline: end face, outer arc, end face, inner arc. If R < W/2, the inner radius is 0 (square throat). |
+| Round elbow | R = 1.5·d, drawn as a smooth arc outline in plan. Also draw the centreline arc like the `Round D` blocks (linetype and colour of the block's centreline). |
+| Concentric transition | L = max(W_large/2, 1.207·ΔW, 1.207·ΔH). SMACNA 1995 Fig 2-7 limits the included angle to 45° diverging and 60° converging; 1.207 is the stricter 45° case. Outline: a trapezoid centred on the axis. |
+| Eccentric transition (align) | L = max(W_large/2, 1.732·ΔW). Fig 2-7: 30° max from the flat side, which lies on the aligned edge. |
+| Rectangular branch (shoe tap) | 45° lead-in L = max(Wb/2, 102). SMACNA Fig 2-6 gives W/4 with a 4" minimum, W being the branch width; the user's habit is Wb/2. The opening on the main wall is Wb + L, with the 45° side upstream and the downstream side square. The branch duct starts L from the main wall; there is no extra neck. |
+| Round branch (conical tap) | Cone base d+51 on the main wall, narrowing to d over 152, then a 51 collar. The branch duct starts 203 from the wall. |
+| Rectangular-to-round | Same as a concentric transition, with d in place of the width. |
+
+If a straight duct would come out shorter than 0 after the takeups, retry that
+corner with R = W/2. If it is still too short, refuse the point and say why.
+
+### `HVACDUCT`: draw duct runs
+
+1. **Dialog.**
+   - Shape (rectangular or round), and W×H or d. Offer the sizes found in the
+     drawing and the template, and accept free entry.
+   - System layer: the template's duct layers, read with
+     `TemplateSource.GetLayerNames()`. They include `EIA_1 SUPPLY AIR`,
+     `EIA_1 RETURN AIR`, `EIA_1 OUTSIDE AIR`, `EIA_1 EXHAUST AIR`,
+     `EIA_1 PRIMARY SUPPLY AIR`, `EIA_1 PRIMARY RETURN AIR`, `EIA_1 TOILET AIR`, and
+     `EIA_2 EXHAUST SMOKE`. Use exact names from the template, never guesses.
+   - Default segment length, and the fitting factors from the table above.
+2. **Start point.**
+   - On the end face of an existing duct: continue that run.
+   - On the side wall of an existing duct: start a branch with a tap. The branch
+     runs perpendicular to the main, away from it.
+   - Anywhere else: a free start.
+3. **Loop.** Prompt `Next point or [Size/Undo] <length>:`.
+   - A click, osnap, ortho, polar or typed direct distance gives the next vertex.
+   - Enter on an empty input uses the dialog length toward the current cursor
+     direction, or the previous segment's direction, or +X.
+   - `Size` changes the size from the current vertex and inserts a transition.
+   - `Undo` removes the last segment and its fittings and restores the previous
+     segment's length.
+   - Esc or Enter at the first prompt ends the command.
+4. **Preview.** While a point is being picked, show the pending segment's outline
+   and the elbow at the previous vertex as transient graphics, updated from
+   `PointMonitor` as in `HVACSTRETCH`. Apply ortho in the preview when `ORTHOMODE`
+   is on.
+5. **Commit.**
+   - Each straight segment is one block reference on the system layer, with
+     `Distance3` equal to the centreline length minus the takeups.
+   - When the next vertex adds an elbow, shorten the previous block.
+   - Continuing from an existing duct may need an elbow and/or a transition at its
+     end, which shortens that duct as well. If the end at `Position` is the one
+     that moves, move `Position` too.
+6. **Missing size.** Look in the drawing first, then import from the template. If
+   the template lacks it, clone the nearest size of the same shape through a
+   scratch database, rename it, and move the visible outline's ±W/2 vertices. This
+   recipe was verified in `accoreconsole`; see `CLAUDE.md`.
+7. **Optional.** If the last point lies on another duct's side wall, finish with a
+   tap.
+
+### `HVACDUCTALIGN`: align duct edges (Revit Align)
+
+1. **Pick the reference edge.** Use `GetNestedEntity`: a line or polyline segment
+   inside a duct reference, or a plain LINE/LWPOLYLINE. Map it to world
+   coordinates with `PromptNestedEntityResult.Transform`.
+2. **Pick the edge to align.** It must be a segment inside a duct reference, B,
+   parallel to the reference within 1°; otherwise say why and ask again.
+   - Translate B perpendicular to the edge so the two edges become collinear.
+   - The keyword `Multiple` keeps the same reference for further picks.
+3. **Join.** If the reference belongs to duct A and A and B are coaxial-parallel
+   with facing ends, ask `Join? [Yes/No] <Yes>`.
+   - Equal widths: change B's `Distance3` (and its `Position`, if needed) so B's
+     facing end meets A's.
+   - Different widths: add an eccentric transition with its flat side on the
+     aligned edge, and adjust B to meet it.
+   - If B would end up shorter than 100, skip the join and say so.
+4. **Perpendicular ducts** are out of scope for this version; say so.
+
+### `HVACPIPESIZE`: size a pipe run
+
+**Layer catalogue:**
+
+| Type | Layer name | Sizes |
+| --- | --- | --- |
+| CHWS, CHWR | `EIA_1 CHWS DN<n>`, `EIA_1 CHWR DN<n>` | DN15, 20, 25, 32, 40, 50, 65, 80, 100, 125, 150, 200, 250, 300, 350, 400, 450, 500, 600 |
+| Condensate | `EIA_1 Pipe condensated DN<n>` | DN21, 27, 34, 48, 60, 90, 110 |
+| Refrigerant | The template's exact `EIA_1 RP` names, bracket included | 9.5-6.4, 12.7-6.4, 15.9-6.4, 15.9-9.5 (14), 19.1-9.5 (22.4), 22.2-9.5 (28), 28.6-12.7 (33.6-44.8), 28.6-15.9 (50.4-61.6), 34.9-15.9 (67.2), 34.9-19.1 (72.8-95.2), 41.3-19.1 (100.8-151.2) |
+| CWS, CWR, HWS, HWR (new) | `EIA_1 CWS DN<n>`, `EIA_1 CWR DN<n>`, `EIA_1 HWS DN<n>`, `EIA_1 HWR DN<n>` | Same DN list as CHW |
+
+**Creating a missing layer:**
+- If the layer is in the template, import it with `TemplateSource.ImportLayers`.
+- New CW/HW layers are not in the template:
+  - Colour: per DN, from the CHW table (DN15 1, 20 2, 25 3, 32 4, 40 5, 50 6,
+    65 21, 80 45, 100 86, 125 140, 150 162, 200 190, 250 20, 300 61, 350 127,
+    400 187, 450 154, 500 221, 600 16).
+  - Linetype: copied from the template. CWS and CWR take the `CWS`/`CWR` linetypes
+    of `EIA_1 COOLING WATER SUPPLY`/`RETURN`. HWS and HWR take the linetypes of
+    `EIA_1 HOT WATER SUPPLY`/`RETURN`.
+  - Add a linetype import to `TemplateSource` if needed.
+
+**Behaviour:**
+
+1. **Pick a point** on a LINE or LWPOLYLINE. The core finds the run:
+   - Build a graph of every LINE/LWPOLYLINE segment on pipe layers: the picked
+     layer, the catalogue layers, and the template's unsized water, drain and gas
+     layers.
+   - Weld endpoints within 1 mm (configurable).
+   - A segment end touching another segment's interior is a T node and splits
+     that segment.
+   - Interior crossings are not nodes, because pipes cross at different levels.
+   - From the picked segment, walk both ways through degree-2 nodes (corners).
+     Stop at degree 1, at degree 3 or more, and where the next segment is on a
+     different layer.
+   - Do not stop at valves or other blocks; pipes run through them in the template.
+2. **Highlight the run** and show the dialog: pipe type and size, preselected with
+   the last values.
+3. **Apply.** Split the source curves at the run boundaries with `GetSplitCurves`,
+   with sorted parameters and points snapped via `GetClosestPointTo`.
+   - Run pieces go to the new layer, with colour and linetype ByLayer.
+   - Other pieces keep everything.
+   - Reuse the original entity for one piece so its handle survives, and append
+     the rest.
+   - Arcs (bulges) are allowed.
+   - Closed polylines split into open pieces.
+4. **Loop** to the next pick. Enter ends the command.
+
+### `HVACREFRIG`: clean up a rough refrigerant network
+
+1. **Select the input.** Select the rough LINE/LWPOLYLINE network, or use the
+   pickfirst set, then pick the outdoor-unit end as the root.
+2. **Settings,** with defaults:
+
+   | Setting | Default |
+   | --- | --- |
+   | Weld tolerance | 50 |
+   | Angle tolerance | 10° |
+   | Align tolerance | 200 |
+   | Jog tolerance | 200 |
+   | Refnet scale s | 1.24 |
+   | Base angle | UCS X |
+
+3. **Clean the geometry,** in the core and in this fixed order:
+   1. Weld endpoints.
+   2. Split at T-touches.
+   3. Classify each edge as horizontal, vertical, 45° or other, against the base
+      angle.
+   4. Chain same-class edges.
+   5. Cluster nearly collinear parallel chains whose projections do not overlap.
+      Cap each cluster's span at the align tolerance so merges cannot chain on.
+      Set each cluster to the length-weighted mean coordinate, or to its anchor,
+      which never moves.
+   6. Collapse jogs shorter than the jog tolerance.
+   7. Delete zero-length edges.
+   8. Dissolve collinear degree-2 nodes when both sides are on the same layer.
+4. **Validate before writing.** Abort, highlight and say why if any check fails:
+   - same number of connected components;
+   - no new crossings or overlaps;
+   - anchors unmoved;
+   - still a tree.
+
+   Show a transient preview and ask for confirmation, then write in one
+   transaction.
+5. **Refnets.** Run a BFS from the root. At each degree-3 node N:
+   - The upstream edge is the edge toward the root, with direction d̂ from the
+     upstream edge into N.
+   - The through child is the one collinear with d̂; the branch is the other.
+   - Insert `Branch Connection (1)`, imported from the template if missing, on the
+     upstream pipe's layer.
+     - At scale s, with its inlet at N − 750·s·d̂ and rotation along d̂.
+     - Local geometry: inlet (0,0), main outlet (750,0), branch outlet (750,−200),
+       all pointing local +X.
+     - Mirror the block (X scale −s, rotation + 180°) when the branch is on the left
+       of d̂.
+   - Cut the pipes at all three ports:
+     - the upstream pipe ends at the inlet;
+     - the through pipe starts at N;
+     - the branch pipe starts at N + 200·s·n̂, where n̂ is the unit normal toward
+       the branch.
+   - Report, and do not modify, these cases:
+     - the upstream straight run is shorter than 750·s;
+     - the branch's first leg is shorter than 200·s;
+     - no collinear through child (a bull-head tee);
+     - degree 4 or more;
+     - an existing `Branch Connection (1)` at N.
+6. **No sizing.** The command does not size pipes. Use `HVACPIPESIZE` with the
+   `RP` layers.
+
+### Verification
+
+- **Core tests:** cover each formula in the tables above, mirrored and rotated
+  ducts, run finding (corners, T nodes, crossings, layer changes, closed
+  polylines, arcs), orthogonalisation (the cluster span cap, anchors, validation
+  failures) and refnet placement (mirroring, short-leg reports). Run every check
+  under en-US, vi-VN and tr-TR.
+- **Headless tests:** an `accoreconsole` test project per stream
+  (`tests/DuctAcadTests`, `tests/PipeAcadTests`), each with its own `/isolate`
+  profile folder under `%TEMP%`. Cover block import, clone/rename/widen, inserting
+  and shortening ducts, splitting and relayering curves, layer creation, and refnet
+  insertion, all on a copy of the template.
+- **Manual tests in AutoCAD:** the preview, osnap/ortho/typed input, Esc
+  handling, and nested-entity picking.
+
 ## AutoCAD add-in development notes
 
 - **Two Debug output folders:**
