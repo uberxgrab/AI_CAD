@@ -156,7 +156,7 @@ namespace HvacAiCadAddin.Commands
 
             string propertyName;
             double originalPropertyValue;
-            if (!TryGetDistanceProperty(
+            if (!DynamicBlockHelpers.TryGetDistanceProperty(
                 block,
                 out propertyName,
                 out originalPropertyValue))
@@ -184,7 +184,7 @@ namespace HvacAiCadAddin.Commands
             Vector3d direction = transformedAxis.GetNormal();
             double minimumProjection;
             double maximumProjection;
-            GetProjectionRange(
+            DynamicBlockHelpers.GetProjectionRange(
                 extents,
                 direction,
                 out minimumProjection,
@@ -402,7 +402,7 @@ namespace HvacAiCadAddin.Commands
                         ? propertyDisplacement
                         : -propertyDisplacement;
 
-                    if (!TryChangeDistanceProperty(
+                    if (!DynamicBlockHelpers.TryChangeDistanceProperty(
                         block,
                         candidate.PropertyName,
                         desiredPropertyChange,
@@ -432,148 +432,6 @@ namespace HvacAiCadAddin.Commands
             }
         }
 
-        private static bool TryChangeDistanceProperty(
-            BlockReference block,
-            string propertyName,
-            double propertyDisplacement,
-            Editor editor)
-        {
-            double currentValue;
-            if (!TryGetDistancePropertyValue(
-                block,
-                propertyName,
-                out currentValue))
-            {
-                return false;
-            }
-
-            return TrySetDistancePropertyValue(
-                block,
-                propertyName,
-                currentValue + propertyDisplacement,
-                editor,
-                true);
-        }
-
-        private static bool TryGetDistanceProperty(
-            BlockReference block,
-            out string propertyName,
-            out double propertyValue)
-        {
-            propertyName = null;
-            propertyValue = 0.0;
-
-            foreach (DynamicBlockReferenceProperty property
-                in block.DynamicBlockReferencePropertyCollection)
-            {
-                if (property.ReadOnly ||
-                    property.Value == null ||
-                    !IsNumeric(property.Value) ||
-                    !IsDistanceProperty(property.PropertyName))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    propertyValue = Convert.ToDouble(property.Value);
-                }
-                catch
-                {
-                    continue;
-                }
-
-                propertyName = property.PropertyName;
-                return true;
-            }
-
-            return false;
-        }
-
-        private static bool TryGetDistancePropertyValue(
-            BlockReference block,
-            string propertyName,
-            out double propertyValue)
-        {
-            propertyValue = 0.0;
-
-            foreach (DynamicBlockReferenceProperty property
-                in block.DynamicBlockReferencePropertyCollection)
-            {
-                if (!property.PropertyName.Equals(
-                        propertyName,
-                        StringComparison.OrdinalIgnoreCase) ||
-                    property.Value == null ||
-                    !IsNumeric(property.Value))
-                {
-                    continue;
-                }
-
-                try
-                {
-                    propertyValue = Convert.ToDouble(property.Value);
-                    return true;
-                }
-                catch
-                {
-                    return false;
-                }
-            }
-
-            return false;
-        }
-
-        private static bool TrySetDistancePropertyValue(
-            BlockReference block,
-            string propertyName,
-            double newValue,
-            Editor editor,
-            bool reportChange)
-        {
-            foreach (DynamicBlockReferenceProperty property
-                in block.DynamicBlockReferencePropertyCollection)
-            {
-                if (!property.PropertyName.Equals(
-                        propertyName,
-                        StringComparison.OrdinalIgnoreCase) ||
-                    property.ReadOnly)
-                {
-                    continue;
-                }
-
-                try
-                {
-                    double currentValue = Convert.ToDouble(property.Value);
-                    property.Value = newValue;
-
-                    if (reportChange)
-                    {
-                        editor.WriteMessage(
-                            "\nProperty '{0}': {1:F2} -> {2:F2}",
-                            property.PropertyName,
-                            currentValue,
-                            newValue);
-                    }
-
-                    return true;
-                }
-                catch (System.Exception ex)
-                {
-                    if (reportChange)
-                    {
-                        editor.WriteMessage(
-                            "\nFailed to set property '{0}': {1}",
-                            property.PropertyName,
-                            ex.Message);
-                    }
-
-                    return false;
-                }
-            }
-
-            return false;
-        }
-
         private static void AlignOppositeEnd(
             BlockReference block,
             AxisInfo axis,
@@ -582,7 +440,7 @@ namespace HvacAiCadAddin.Commands
             Extents3d currentExtents = block.GeometricExtents;
             double currentStart;
             double currentEnd;
-            GetProjectionRange(
+            DynamicBlockHelpers.GetProjectionRange(
                 currentExtents,
                 axis.Direction,
                 out currentStart,
@@ -597,62 +455,6 @@ namespace HvacAiCadAddin.Commands
                 block.TransformBy(Matrix3d.Displacement(
                     axis.Direction * requiredTranslation));
             }
-        }
-
-        private static void GetProjectionRange(
-            Extents3d extents,
-            Vector3d direction,
-            out double minimumProjection,
-            out double maximumProjection)
-        {
-            Point3d min = extents.MinPoint;
-            Point3d max = extents.MaxPoint;
-            minimumProjection = double.MaxValue;
-            maximumProjection = double.MinValue;
-
-            for (int x = 0; x <= 1; x++)
-            {
-                for (int y = 0; y <= 1; y++)
-                {
-                    for (int z = 0; z <= 1; z++)
-                    {
-                        Point3d corner = new Point3d(
-                            x == 0 ? min.X : max.X,
-                            y == 0 ? min.Y : max.Y,
-                            z == 0 ? min.Z : max.Z);
-                        double projection = corner.GetAsVector().DotProduct(direction);
-                        minimumProjection = Math.Min(minimumProjection, projection);
-                        maximumProjection = Math.Max(maximumProjection, projection);
-                    }
-                }
-            }
-        }
-
-        private static bool IsDistanceProperty(string propertyName)
-        {
-            return propertyName.Equals(
-                       "Distance3",
-                       StringComparison.OrdinalIgnoreCase)
-                || propertyName.Equals(
-                    "Distance",
-                    StringComparison.OrdinalIgnoreCase)
-                || propertyName.Equals(
-                    "Length",
-                    StringComparison.OrdinalIgnoreCase)
-                || propertyName.Equals(
-                    "Width",
-                    StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsNumeric(object value)
-        {
-            return value is byte ||
-                   value is short ||
-                   value is int ||
-                   value is long ||
-                   value is float ||
-                   value is double ||
-                   value is decimal;
         }
 
         // Provides a temporary dynamic-block preview while AutoCAD is asking
@@ -760,7 +562,7 @@ namespace HvacAiCadAddin.Commands
                             ? propertyDisplacement
                             : -propertyDisplacement;
 
-                        if (TrySetDistancePropertyValue(
+                        if (DynamicBlockHelpers.TrySetDistancePropertyValue(
                             block,
                             candidate.PropertyName,
                             candidate.OriginalPropertyValue +
@@ -826,7 +628,7 @@ namespace HvacAiCadAddin.Commands
                 BlockReference block,
                 DynamicBlockCandidate candidate)
             {
-                TrySetDistancePropertyValue(
+                DynamicBlockHelpers.TrySetDistancePropertyValue(
                     block,
                     candidate.PropertyName,
                     candidate.OriginalPropertyValue,
