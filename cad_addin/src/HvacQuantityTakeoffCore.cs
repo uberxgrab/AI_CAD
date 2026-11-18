@@ -570,7 +570,8 @@ namespace HvacAiCadAddin.Takeoff
         private const string PumpLabelBlock = "HVAC-NAME OF EQUIPMENTS";
         private const string PumpSymbolBlock = "HVAC_PUMP";
 
-        private static readonly string[] SteelLayerMarkers = { "CHWS", "CHWR", "HWS", "HWR" };
+        // CWS/CWR (cooling water) is steel too: user decision of 2026-11-18.
+        private static readonly string[] SteelLayerMarkers = { "CHWS", "CHWR", "HWS", "HWR", "CWS", "CWR" };
         private static readonly string[] CondensateLayerMarkers = { "CONDENSATED" };
         private static readonly Dictionary<string, string> CopperWallThickness = new Dictionary<string, string>
         {

@@ -83,6 +83,10 @@ namespace HvacQtoCoreTests
             Classify("CHWR DN65", Steel, 65);
             Classify("HWS DN80", Steel, 80);
             Classify("HWR DN90", Steel, 90);
+            // Cooling water is steel (user decision 2026-11-18), not uPVC by its DN symbol.
+            Classify("EIA_1 CWS DN150", Steel, 150);
+            Classify("EIA_1 CWR DN150", Steel, 150);
+            Classify("eia_1 cwr dn40", Steel, 40);
             Classify("RP 15.9/9.5", Copper, 15.9, 9.5);
             Classify("Pipe CONDENSATED", Upvc);
             Classify("PIPE_D34", Upvc, 34);

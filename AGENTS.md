@@ -132,10 +132,14 @@ they can be tested without AutoCAD, and keep the AutoCAD file a thin reader.
 
   | Priority | Layer contains | Output text |
   | --- | --- | --- |
-  | 1 | `CHWS`, `CHWR`, `HWS`, `HWR` | `Ống thép hàn mạ kẽm DN200, SCH40` |
+  | 1 | `CHWS`, `CHWR`, `HWS`, `HWR`, `CWS`, `CWR` | `Ống thép hàn mạ kẽm DN200, SCH40` |
   | 2 | `a/b` pair, or `RP a-b` pair | `Ống đồng D15.9 dày 1.0mm, kèm bảo ôn 19mm` |
   | 3 | `CONDENSATED`, or a `D34`/`DN50` symbol | `Ống thoát nước ngưng uPVC Class 1 D27, kèm bảo ôn 13mm` |
   | - | anything else | Not exported; counted and listed on the command line |
+
+  Curves carrying the `HVACAI_FITTING` xdata app (fittings drawn by `HVACDUCT`/
+  `HVACDUCTALIGN`) are skipped before classification: they are not taken off and not
+  reported as unexported; the command line shows only their count.
 
   - Copper: text in parentheses is ignored. Each entity adds its full length to
     both sizes. Wall thickness is 0.8mm for D6.4 and D9.5, and 1.0mm for D12.7 to

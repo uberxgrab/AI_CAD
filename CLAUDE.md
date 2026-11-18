@@ -101,10 +101,11 @@ parser.load_dxf -> extract_entities      RawEntity
   wording. Everything else keeps its block name and CAD parameters.
 - If the selection has a pump label, `HVAC_PUMP` symbols are excluded so pumps are
   not counted twice.
-- Curves are classified by layer, first match wins: `CHWS`/`CHWR`/`HWS`/`HWR` is
-  steel, an `a/b` or `RP a-b` pair is copper, and `CONDENSATED` or a `D34`/`DN50`
-  symbol is uPVC. Other layers are not exported and are reported on the command
-  line.
+- Curves are classified by layer, first match wins: `CHWS`/`CHWR`/`HWS`/`HWR`/
+  `CWS`/`CWR` is steel, an `a/b` or `RP a-b` pair is copper, and `CONDENSATED` or a
+  `D34`/`DN50` symbol is uPVC. Other layers are not exported and are reported on
+  the command line. Curves tagged with the `HVACAI_FITTING` xdata app (fittings drawn
+  by the duct commands) are skipped and only counted.
 - A settings dialog before the takeoff asks for the contingency factor (default
   1.0), the thickness bands, and shaft risers (duct, steel, or condensate pipe,
   with size, height, and runs). It remembers the last values.

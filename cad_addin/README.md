@@ -58,7 +58,7 @@ Lines and polylines are classified by layer, first match wins:
 
 | Layer contains | Exported as |
 | --- | --- |
-| `CHWS`, `CHWR`, `HWS`, `HWR` | Galvanized welded steel pipe, SCH40 |
+| `CHWS`, `CHWR`, `HWS`, `HWR`, `CWS`, `CWR` | Galvanized welded steel pipe, SCH40 |
 | A pair such as `15.9/9.5` or `RP 15.9-9.5` | Copper pipe, with the full length added to both sizes |
 | `CONDENSATED`, or a symbol such as `D34` or `DN50` | uPVC Class 1 condensate pipe |
 

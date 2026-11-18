@@ -59,6 +59,7 @@ namespace HvacAiCadAddin.Commands
 
             var blocks = new List<TakeoffBlockInput>();
             var curves = new List<TakeoffCurveInput>();
+            int skippedFittingCount = 0;
 
             Database database = document.Database;
             using (Transaction transaction = database.TransactionManager.StartTransaction())
@@ -76,6 +77,14 @@ namespace HvacAiCadAddin.Commands
                     if (block != null)
                     {
                         blocks.Add(ReadBlock(block, transaction));
+                        continue;
+                    }
+
+                    // Fittings drawn by HVACDUCT/HVACDUCTALIGN are not taken off
+                    // (user decision) and are not reported as unexported curves.
+                    if (IsGeneratedFitting(entity))
+                    {
+                        skippedFittingCount++;
                         continue;
                     }
 
@@ -115,6 +124,8 @@ namespace HvacAiCadAddin.Commands
                 editor.WriteMessage(" (layers: {0})",
                     string.Join(", ", result.NotExportedLayers.Take(MaxReportedLayers)));
             }
+            if (skippedFittingCount > 0)
+                editor.WriteMessage("\nGenerated duct fittings skipped: {0}", skippedFittingCount);
             editor.WriteMessage("\nHVAC_PUMP blocks excluded: {0}", result.ExcludedPumpBlockCount);
             editor.WriteMessage("\nDucts below the first band: {0}", result.DuctsBelowFirstBandCount);
             editor.WriteMessage("\nContingency factor: {0}; shaft rows added: {1}",
@@ -155,6 +166,18 @@ namespace HvacAiCadAddin.Commands
             ObjectId nameId = block.IsDynamicBlock ? block.DynamicBlockTableRecord : block.BlockTableRecord;
             BlockTableRecord definition = transaction.GetObject(nameId, OpenMode.ForRead) as BlockTableRecord;
             return definition == null ? "(unknown block)" : definition.Name;
+        }
+
+        // Registered xdata application on fittings drawn by the duct commands
+        // (see AGENTS.md, "Drafting commands").
+        private const string FittingXDataApp = "HVACAI_FITTING";
+
+        private static bool IsGeneratedFitting(Entity entity)
+        {
+            using (ResultBuffer data = entity.GetXDataForApplication(FittingXDataApp))
+            {
+                return data != null;
+            }
         }
 
         private static double GetCurveLength(Entity entity)
