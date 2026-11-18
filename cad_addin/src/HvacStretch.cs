@@ -127,28 +127,18 @@ namespace HvacAiCadAddin.Commands
         {
             candidate = null;
 
-            Extents3d extents;
-            try
-            {
-                // Use the reference's actual world-space extents. Dynamic
-                // block definition bounds are not reliable after an action
-                // has created an anonymous block definition.
-                extents = block.GeometricExtents;
-            }
-            catch
-            {
-                return false;
-            }
-
+            // Bounds come from the reference's displayed geometry (its current
+            // anonymous representation), not the dynamic definition, and not
+            // GeometricExtents, which includes invisible entities.
             CoordinateSystem3d coordinateSystem =
                 block.BlockTransform.CoordinateSystem3d;
 
             AxisInfo xAxis = CreateAxis(
-                extents,
+                block,
                 coordinateSystem.Xaxis);
 
             AxisInfo yAxis = CreateAxis(
-                extents,
+                block,
                 coordinateSystem.Yaxis);
 
             if (xAxis == null && yAxis == null)
@@ -175,7 +165,7 @@ namespace HvacAiCadAddin.Commands
         }
 
         private static AxisInfo CreateAxis(
-            Extents3d extents,
+            BlockReference block,
             Vector3d transformedAxis)
         {
             if (transformedAxis.Length <= PointTolerance)
@@ -184,11 +174,14 @@ namespace HvacAiCadAddin.Commands
             Vector3d direction = transformedAxis.GetNormal();
             double minimumProjection;
             double maximumProjection;
-            DynamicBlockHelpers.GetProjectionRange(
-                extents,
+            if (!DynamicBlockHelpers.TryGetDisplayedProjectionRange(
+                block,
                 direction,
                 out minimumProjection,
-                out maximumProjection);
+                out maximumProjection))
+            {
+                return null;
+            }
 
             AxisInfo axis = new AxisInfo(
                 direction,
@@ -437,14 +430,16 @@ namespace HvacAiCadAddin.Commands
             AxisInfo axis,
             bool startSelected)
         {
-            Extents3d currentExtents = block.GeometricExtents;
             double currentStart;
             double currentEnd;
-            DynamicBlockHelpers.GetProjectionRange(
-                currentExtents,
+            if (!DynamicBlockHelpers.TryGetDisplayedProjectionRange(
+                block,
                 axis.Direction,
                 out currentStart,
-                out currentEnd);
+                out currentEnd))
+            {
+                return;
+            }
 
             double requiredTranslation = startSelected
                 ? axis.EndProjection - currentEnd
