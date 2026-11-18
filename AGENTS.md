@@ -268,8 +268,8 @@ Both are new commands, so present a plan and get approval first. Reuse the
 ### What the project drawing shows
 
 These facts come from `test.dxf`. Its model space has only 47 anonymous block
-inserts and no curves, so it is not an end-to-end fixture. Use `CAD/test.dwg` or
-a real project drawing for that.
+inserts and no curves, so it is not an end-to-end fixture. Use the user's template
+`CAD/MEP_DWT_3.dwg` (converted to DXF) or a real project drawing for that.
 
 - **Valve and accessory block definitions:** `HVAC_GATE VALVE (NORMAL OPEN)`,
   `HVAC_GATE VALVE (NORMAL CLOSED)`, `HVAC_BUTTERFLY VALVE`,

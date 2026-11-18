@@ -26,6 +26,11 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
     outside `cad_addin/`, whose SDK glob would compile it into the add-in.
 - `CAD/`: representative CAD inputs. Explicitly named root fixtures such as
   `test.dxf` are also allowed.
+  - `CAD/MEP_DWT_3.dwg`: the user's template drawing. It holds their duct blocks,
+    refnet (branch joint) blocks, and pipe-size layers such as `EIA_1 CHWS DN40`,
+    `EIA_1 Pipe condensated DN21`, and `EIA_1 RP 28.6-12.7 (33.6-44.8)`; the
+    bracket appears to be a capacity range. Treat it as read-only, and convert a
+    copy to DXF to inspect it (see Commands).
 - `out/`: generated reports and annotated drawings.
 - `cad_addin/`: managed C# AutoCAD add-in (AutoCAD 2023, .NET Framework 4.8,
   x64, C# 7.3). It is not an ObjectARX/C++ project.
@@ -217,10 +222,29 @@ dotnet run --project tests\HvacQtoCoreTests\HvacQtoCoreTests.csproj -c Debug -- 
 dotnet run --project tests\HvacQtoCoreTests\HvacQtoCoreTests.csproj -c Debug -- --probe
 ```
 
+To inspect a DWG, convert a copy in a scratch folder to DXF with AutoCAD's core
+console. It runs as a separate headless process and never touches a running
+`acad.exe`; the 26 MB template converts in a few seconds. Run it from PowerShell,
+because Git Bash may rewrite arguments that start with `/`.
+
+```powershell
+& "C:\Program Files\Autodesk\AutoCAD 2023\accoreconsole.exe" /i C:\scratch\in.dwg /s C:\scratch\dxfout.scr
+```
+
+`dxfout.scr` gives one response per line:
+
+```
+_.DXFOUT
+"C:\scratch\in.dxf"
+16
+_.QUIT
+_Y
+```
+
 ## Known pitfalls
 
-- **DWG input is rejected.** `parser.load_dxf` raises on `.dwg`, so `CAD/test.dwg`
-  must be converted to DXF first. Only `test.dxf` works with `main.py` as is.
+- **DWG input is rejected.** `parser.load_dxf` raises on `.dwg`, and ezdxf cannot
+  read DWG either. Convert a copy to DXF first (see Commands).
 - **`requirements.txt` is UTF-16 LE with a BOM.** Plain text tools and some editors
   show it garbled or with null bytes. Keep the encoding when editing it, or
   re-save it as UTF-8 deliberately.
@@ -238,9 +262,10 @@ dotnet run --project tests\HvacQtoCoreTests\HvacQtoCoreTests.csproj -c Debug -- 
   `RP` are not copper, and text in parentheses is ignored.
 - **A loaded add-in cannot be replaced.** AutoCAD keeps a `NETLOAD`ed assembly until
   it exits. Restart AutoCAD before loading a rebuilt DLL.
-- **Build outputs are tracked.** There is no `.gitignore`, and `cad_addin/bin/`,
-  `cad_addin/obj/`, and `out/` files are in git. Check `git status` and do not
-  stage them by accident.
+- **`out/` is tracked.** `.gitignore` excludes `cad_addin/bin/`, `cad_addin/obj/`,
+  `.tmp_test_runs/`, `__pycache__/`, and `venv/`, but the four sample reports in
+  `out/` are still in git. Running the CLI overwrites them, so check `git status`
+  and do not stage them by accident.
 - **Machine-specific paths.** `start.scr` and the `.csproj` hard-code
   `C:\Users\Admin\hvac_ai` and the AutoCAD 2023 install path.
 
