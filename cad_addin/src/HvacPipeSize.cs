@@ -195,6 +195,12 @@ namespace HvacAiCadAddin.Commands
             if (note != null)
                 editor.WriteMessage("\n" + note);
 
+            if (string.Equals(run.Layer, layerName, StringComparison.OrdinalIgnoreCase))
+            {
+                editor.WriteMessage("\nThe run is already on layer {0}: nothing was changed.", layerName);
+                return;
+            }
+
             ApplySummary result;
             if (!PipeDrawingLibrary.ApplyRun(db, sources, plans, layerName, out result, out error))
             {
