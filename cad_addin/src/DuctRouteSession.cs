@@ -45,7 +45,7 @@ namespace HvacAiCadAddin.Ducts
         }
 
         private readonly Database _db;
-        private readonly TemplateSource _template;
+        private TemplateSource _template;
         private readonly IList<DuctSize> _templateSizes;
         private readonly FittingSettings _settings;
         private readonly string _layer;
@@ -79,6 +79,16 @@ namespace HvacAiCadAddin.Ducts
             _layer = layer;
             _startSize = size;
             CurrentSize = size;
+        }
+
+        /// <summary>
+        /// The template, used to import layers and blocks. The command opens it only when something is
+        /// missing from the drawing, and sets it here before the point that needs it.
+        /// </summary>
+        public TemplateSource Template
+        {
+            get { return _template; }
+            set { _template = value; }
         }
 
         /// <summary>The size the next segment gets; the Size keyword changes it.</summary>

@@ -348,6 +348,17 @@ namespace HvacAiCadAddin.Ducts
 
         // ------------------------------------------------------------------ layers
 
+        internal static bool LayerExists(Database db, string layerName)
+        {
+            using (Transaction transaction = db.TransactionManager.StartTransaction())
+            {
+                LayerTable table = (LayerTable)transaction.GetObject(db.LayerTableId, OpenMode.ForRead);
+                bool exists = table.Has(layerName);
+                transaction.Commit();
+                return exists;
+            }
+        }
+
         /// <summary>Makes sure the layer exists, importing it from the template when it does not.</summary>
         internal static bool EnsureLayer(
             Database db, string layerName, TemplateSource template, out string error)
