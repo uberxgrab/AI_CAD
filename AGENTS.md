@@ -566,6 +566,50 @@ corner with R = W/2. If it is still too short, refuse the point and say why.
 6. **No sizing.** The command does not size pipes. Use `HVACPIPESIZE` with the
    `RP` layers.
 
+### Pipe stream: implementation notes (`HVACPIPESIZE`, `HVACREFRIG`)
+
+Files, all under `cad_addin/src/`. The core is AutoCAD-free (namespace
+`HvacAiCadAddin.Pipes`, shares `Vec2`/`Outline` with `DuctGeometryCore.cs`):
+
+| File | Role |
+| --- | --- |
+| `PipeCatalogCore.cs`, `PipeSettingsCore.cs` | Layer catalogue, colours, pipe-layer name filter, remembered dialog values. |
+| `PipeNetworkCore.cs` | Welded graph with T nodes, run finder, cut plan (`CurveSplitPlan`). |
+| `RefrigCleanerCore.cs` | Cleaning order, validation, refnet placement, output paths. |
+| `PipeDrawingLibrary.cs`, `RefrigWriter.cs` | Non-interactive AutoCAD code: read curves, layers, split, write. |
+| `HvacPipeSize.cs`, `HvacRefrig.cs`, `PipeSizeForm.cs`, `RefrigSettingsForm.cs`, `PipeTransients.cs` | Commands, dialogs, transient graphics. |
+
+Settings live in `%APPDATA%\HvacAiCadAddin\HVACPIPESIZE.settings` and
+`HVACREFRIG.settings`.
+
+Where the spec left a choice, the code does this (all conservative):
+
+- **Unsized pipe layers** (for the run graph) are the drawing's layers whose names have a
+  water, drain, gas, pipe or refrigerant word and no annotation/equipment word
+  (`PipeCatalog.IsPipeLayer`), plus the picked layer. The template's real layer list could
+  not be read without AutoCAD; check this filter against it.
+- **Weld tolerance** of `HVACPIPESIZE` is the `Weld` keyword at the pick prompt (default 1 mm).
+- **Locked layers:** a run or selection that includes a curve on a locked layer is refused.
+- **`HVACPIPESIZE` split:** run pieces get the layer, colour and linetype ByLayer; the longest
+  piece reuses the original entity (handle kept), the others are appended. A tiny segment
+  (ends welded together) inside a run does not split it.
+- **`HVACREFRIG` anchors** are all pipe ends (degree-1 nodes after weld and T-splits): the
+  root and every leaf. They never move; a chain with anchors at both ends off the line stays as
+  drawn. Pinned chains seed clusters first, then free chains join the nearest cluster.
+- **Orthogonalised joints** sit on the intersection of their chains' lines. Where two parallel
+  chains that cannot share a line meet at a joint, the joint sits midway and both stay slightly
+  off-axis; the jog tolerance does not apply there.
+- **Input checks:** arcs, loops (not a tree), and a root that is not a pipe end are refused.
+  Pipes drawn twice over the same two joints are kept once.
+- **Writing:** the cleaned network is written as one polyline per run between junctions
+  (layer from the run, other properties copied from the source curve that gave most length),
+  the originals are erased, and refnets are inserted, all in one transaction.
+- **Refnet cases reported and left unchanged**, besides the spec's: a branch that does not
+  leave the main at right angles (within the angle tolerance), and networks with no root.
+  The upstream-run check uses the run left after an earlier refnet's port cut.
+- The block is inserted with `Scale3d(+-s, s, s)`; attributes of the block are added
+  with their default text.
+
 ### Verification
 
 - **Core tests:** cover each formula in the tables above, mirrored and rotated
@@ -573,6 +617,9 @@ corner with R = W/2. If it is still too short, refuse the point and say why.
   polylines, arcs), orthogonalisation (the cluster span cap, anchors, validation
   failures) and refnet placement (mirroring, short-leg reports). Run every check
   under en-US, vi-VN and tr-TR.
+- **Pipe core tests:** `tests/PipeCoreTests` (about 960 checks per culture) cover the
+  above for the pipe stream; run them with `dotnet run --project tests\PipeCoreTests\PipeCoreTests.csproj -c Debug`.
+  `tests/PipeAcadTests` is not written yet.
 - **Headless tests:** an `accoreconsole` test project per stream
   (`tests/DuctAcadTests`, `tests/PipeAcadTests`), each with its own `/isolate`
   profile folder under `%TEMP%`. Cover block import, clone/rename/widen, inserting
