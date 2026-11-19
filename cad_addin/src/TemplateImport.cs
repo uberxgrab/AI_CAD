@@ -150,6 +150,82 @@ namespace HvacAiCadAddin.Commands
             return LookUp(target, target.LayerTableId, wanted, missing);
         }
 
+        // Copies the named linetypes into target. Existing linetypes are kept, and the built-in
+        // Continuous, ByLayer and ByBlock are never copied. Returns name -> linetype id in target for
+        // every name that exists in target afterwards; the rest are listed in missing.
+        public Dictionary<string, ObjectId> ImportLinetypes(
+            Database target,
+            IEnumerable<string> linetypeNames,
+            out List<string> missing)
+        {
+            missing = new List<string>();
+            List<string> wanted = new List<string>(linetypeNames);
+            ObjectIdCollection sourceIds = new ObjectIdCollection();
+
+            using (Transaction transaction =
+                _template.TransactionManager.StartTransaction())
+            {
+                LinetypeTable table = (LinetypeTable)transaction.GetObject(
+                    _template.LinetypeTableId,
+                    OpenMode.ForRead);
+                foreach (string name in wanted)
+                {
+                    if (IsBuiltInLinetype(name))
+                        continue;
+                    if (table.Has(name))
+                        sourceIds.Add(table[name]);
+                }
+
+                transaction.Commit();
+            }
+
+            if (sourceIds.Count > 0)
+            {
+                IdMapping mapping = new IdMapping();
+                _template.WblockCloneObjects(
+                    sourceIds,
+                    target.LinetypeTableId,
+                    mapping,
+                    DuplicateRecordCloning.Ignore,
+                    false);
+            }
+
+            return LookUp(target, target.LinetypeTableId, wanted, missing);
+        }
+
+        private static bool IsBuiltInLinetype(string name)
+        {
+            return string.Equals(name, "Continuous", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "ByLayer", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(name, "ByBlock", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // The name of the linetype a template layer uses, or null if the template has no such layer.
+        public string GetLayerLinetypeName(string layerName)
+        {
+            using (Transaction transaction =
+                _template.TransactionManager.StartTransaction())
+            {
+                LayerTable layers = (LayerTable)transaction.GetObject(
+                    _template.LayerTableId,
+                    OpenMode.ForRead);
+                string name = null;
+                if (layers.Has(layerName))
+                {
+                    LayerTableRecord layer = (LayerTableRecord)transaction.GetObject(
+                        layers[layerName],
+                        OpenMode.ForRead);
+                    LinetypeTableRecord linetype = (LinetypeTableRecord)transaction.GetObject(
+                        layer.LinetypeObjectId,
+                        OpenMode.ForRead);
+                    name = linetype.Name;
+                }
+
+                transaction.Commit();
+                return name;
+            }
+        }
+
         // Layer names that exist in the template, for building pick lists.
         public List<string> GetLayerNames()
         {
