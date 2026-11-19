@@ -1,0 +1,47 @@
+<Project>
+  <!--
+    Headless accoreconsole tests for the non-interactive duct classes. The DLL links the
+    sources it tests and references only AcDbMgd and AcCoreMgd (never AcMgd), so
+    accoreconsole can load it. Build folders stay in %TEMP%. Run it with run-tests.ps1.
+  -->
+  <PropertyGroup>
+    <DuctAcadBuildRoot>$([System.IO.Path]::GetTempPath())DuctAcadTests\</DuctAcadBuildRoot>
+    <BaseIntermediateOutputPath>$(DuctAcadBuildRoot)obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(DuctAcadBuildRoot)bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>DuctAcadTests</RootNamespace>
+    <AssemblyName>DuctAcadTests</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="*.cs" />
+    <Compile Include="..\..\cad_addin\src\DuctGeometryCore.cs" Link="DuctGeometryCore.cs" />
+    <Compile Include="..\..\cad_addin\src\DuctBlockLibrary.cs" Link="DuctBlockLibrary.cs" />
+    <Compile Include="..\..\cad_addin\src\DuctRouteSession.cs" Link="DuctRouteSession.cs" />
+    <Compile Include="..\..\cad_addin\src\DuctAligner.cs" Link="DuctAligner.cs" />
+    <Compile Include="..\..\cad_addin\src\DynamicBlockHelpers.cs" Link="DynamicBlockHelpers.cs" />
+    <Compile Include="..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <Reference Include="AcDbMgd">
+      <HintPath>C:\Program Files\Autodesk\AutoCAD 2023\acdbmgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AcCoreMgd">
+      <HintPath>C:\Program Files\Autodesk\AutoCAD 2023\accoremgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>
