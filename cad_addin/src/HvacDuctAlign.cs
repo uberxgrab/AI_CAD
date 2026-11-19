@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -83,6 +82,14 @@ namespace HvacAiCadAddin.Commands
                     bool aligned = AlignOne(editor, db, reference, result, fittings);
                     if (aligned && !multiple)
                         break;
+
+                    // A merge stretches the reference duct, so re-read it for further picks.
+                    DuctInfo fresh;
+                    if (aligned && reference.Duct != null
+                        && DuctBlockLibrary.TryReadDuct(db, reference.Duct.Id, out fresh))
+                    {
+                        reference.Duct = fresh;
+                    }
                 }
             }
         }
@@ -169,39 +176,15 @@ namespace HvacAiCadAddin.Commands
                 return false;
             }
 
-            // A branch tap is always added, without asking.
-            bool join = plan.Join.Kind == JoinKind.Tap;
-            if (plan.Join.Kind == JoinKind.Direct || plan.Join.Kind == JoinKind.Eccentric)
-            {
-                editor.WriteMessage("\nThe two ducts have facing ends: " + Describe(plan.Join));
-                PromptKeywordOptions joinOptions = new PromptKeywordOptions(
-                    "\nJoin? [Yes/No] <Yes>: ", "Yes No");
-                joinOptions.AllowNone = true;
-                joinOptions.Keywords.Default = "Yes";
-                PromptResult answer = editor.GetKeywords(joinOptions);
-                if (answer.Status == PromptStatus.Cancel)
-                    return false;
-                join = answer.Status == PromptStatus.None
-                    || string.Equals(answer.StringResult, "Yes", StringComparison.OrdinalIgnoreCase);
-            }
-            else if (plan.Note != null)
-            {
+            // Parallel joins and branch taps are made without asking (user request 2026-11-19).
+            bool join = plan.Join.Kind != JoinKind.None;
+            if (!join && plan.Note != null)
                 editor.WriteMessage("\n" + plan.Note);
-            }
 
             string message;
             bool ok = DuctAligner.Apply(db, plan, join, out message);
             editor.WriteMessage("\n" + message);
             return ok;
-        }
-
-        private static string Describe(JoinPlan join)
-        {
-            string length = join.NewLength.ToString("0.#", CultureInfo.InvariantCulture);
-            if (join.Kind == JoinKind.Direct)
-                return "the second duct will end up " + length + " mm long.";
-            return "an eccentric transition " + join.TransitionLength.ToString("0.#", CultureInfo.InvariantCulture)
-                + " mm long is added, and the second duct will end up " + length + " mm long.";
         }
     }
 }

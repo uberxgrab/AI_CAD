@@ -449,9 +449,11 @@ corner with R = W/2. If it is still too short, refuse the point and say why.
    - Translate B perpendicular to the edge so the two edges become collinear.
    - The keyword `Multiple` keeps the same reference for further picks.
 3. **Join.** If the reference belongs to duct A and A and B are coaxial-parallel
-   with facing ends, ask `Join? [Yes/No] <Yes>`.
-   - Equal widths: change B's `Distance3` (and its `Position`, if needed) so B's
-     facing end meets A's.
+   with facing ends, join without asking (user request 2026-11-19).
+   - Same size: merge into one block. A's `Distance3` (and `Position`, if B lies
+     before A's start) is stretched to cover B's far end, and B is erased.
+   - Equal widths but different heights: change B's `Distance3` (and its
+     `Position`, if needed) so B's facing end meets A's.
    - Different widths: add an eccentric transition with its flat side on the
      aligned edge, and adjust B to meet it.
    - If B would end up shorter than 100, skip the join and say so.

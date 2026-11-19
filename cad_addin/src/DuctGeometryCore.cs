@@ -1406,6 +1406,21 @@ namespace HvacAiCadAddin.Ducts
         }
 
         /// <summary>
+        /// The single duct that covers coaxial ducts A and B (B already aligned): from the lowest to
+        /// the highest point of either along A's axis. The start is in A's frame, so A keeps its
+        /// direction and becomes the merged duct.
+        /// </summary>
+        public static void MergedSpan(DuctGeometry a, DuctGeometry b, out Vec2 start, out double length)
+        {
+            double startAlong = a.Along(b.Start);
+            double endAlong = a.Along(b.End);
+            double low = Math.Min(0, Math.Min(startAlong, endAlong));
+            double high = Math.Max(a.Length, Math.Max(startAlong, endAlong));
+            start = a.Start + a.Axis * low;
+            length = high - low;
+        }
+
+        /// <summary>
         /// Plans a branch: duct B runs at right angles to duct A (within 1 degree) and the
         /// reference edge is a side wall of A. B keeps its centreline and its far end; its end
         /// nearer the wall moves to the tap lead from the wall, and a tap is drawn where B's

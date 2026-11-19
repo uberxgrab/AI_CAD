@@ -64,20 +64,26 @@ namespace DuctAcadTests
             TestLog.Near("rotated wall is x = 300300 (to)", 300300, to.X, 1e-6);
             TestLog.Near("rotated wall runs along the duct", 2000, Math.Abs(to.Y - from.Y), 1e-6);
 
-            // --- Direct join, B beyond A's end, same direction, 40 mm off
+            // A stays 300000..302000 at y = 100000 for the cases below that only read it. Each
+            // same-size join gets its own A, because a merge stretches A over B and erases B.
             ObjectId a = Insert(db, W600, 300000, 100000, 0, false, 2000);
-            ObjectId b = Insert(db, W600, 303500, 100040, 0, false, 2000);
-            AlignPlan plan = PlanFor(db, a, 300500, 100300, b, 304000, 100340);
+
+            // --- Direct join, B beyond A's end, same direction, 40 mm off: one block 300000..305500
+            ObjectId a1 = Insert(db, W600, 300000, 140000, 0, false, 2000);
+            ObjectId b = Insert(db, W600, 303500, 140040, 0, false, 2000);
+            AlignPlan plan = PlanFor(db, a1, 300500, 140300, b, 304000, 140340);
             TestLog.True("plan has no error", plan.Error == null, plan.Error);
             TestLog.Near("translation x", 0, plan.Translation.X, 1e-6);
             TestLog.Near("translation y", -40, plan.Translation.Y, 1e-6);
             TestLog.Equal("join is direct", JoinKind.Direct, plan.Join.Kind);
+            TestLog.True("same size merges", plan.Merge);
             TestLog.True("apply with join", DuctAligner.Apply(db, plan, true, out message), message);
-            DuctInfo joined = Read(db, b);
-            TestLog.Near("B start x meets A's end", 302000, joined.Geometry.Start.X, 1e-6);
-            TestLog.Near("B start y aligned", 100000, joined.Geometry.Start.Y, 1e-6);
-            TestLog.Near("B length", 3500, joined.Geometry.Length, 1e-6);
-            AssertMatchesDrawing("joined B", db, b);
+            TestLog.True("B is erased", b.IsErased);
+            DuctInfo joined = Read(db, a1);
+            TestLog.Near("merged start x is A's start", 300000, joined.Geometry.Start.X, 1e-6);
+            TestLog.Near("merged start y", 140000, joined.Geometry.Start.Y, 1e-6);
+            TestLog.Near("merged length reaches B's end", 5500, joined.Geometry.Length, 1e-6);
+            AssertMatchesDrawing("merged A", db, a1);
 
             // --- Alignment only (no join)
             ObjectId b2 = Insert(db, W600, 303500, 100040, 0, false, 2000);
@@ -88,27 +94,41 @@ namespace DuctAcadTests
             TestLog.Near("B moved only sideways: y", 100000, joined.Geometry.Start.Y, 1e-6);
             TestLog.Near("B length unchanged", 2000, joined.Geometry.Length, 1e-6);
 
-            // --- B turned round (rotation 180): Position is its far end, so it must not move.
-            ObjectId reversed = Insert(db, W600, 305500, 100040, 180, false, 2000);
-            plan = PlanFor(db, a, 300500, 100300, reversed, 304500, 100340);
-            TestLog.True("reversed plan", plan.Error == null && plan.Join.Kind == JoinKind.Direct, plan.Error ?? plan.Note);
-            TestLog.True("position stays", !plan.Join.PositionMoves);
+            // --- B turned round (rotation 180, Position is its far end): still one block from A's start.
+            ObjectId a2 = Insert(db, W600, 300000, 150000, 0, false, 2000);
+            ObjectId reversed = Insert(db, W600, 305500, 150040, 180, false, 2000);
+            plan = PlanFor(db, a2, 300500, 150300, reversed, 304500, 150340);
+            TestLog.True("reversed plan", plan.Error == null && plan.Merge, plan.Error ?? plan.Note);
             DuctAligner.Apply(db, plan, true, out message);
-            joined = Read(db, reversed);
-            TestLog.Near("reversed B start x unchanged", 305500, joined.Geometry.Start.X, 1e-6);
-            TestLog.Near("reversed B start y aligned", 100000, joined.Geometry.Start.Y, 1e-6);
-            TestLog.Near("reversed B length reaches A", 3500, joined.Geometry.Length, 1e-6);
-            AssertMatchesDrawing("reversed B", db, reversed);
+            TestLog.True("reversed B is erased", reversed.IsErased);
+            joined = Read(db, a2);
+            TestLog.Near("reversed merge start x", 300000, joined.Geometry.Start.X, 1e-6);
+            TestLog.Near("reversed merge length", 5500, joined.Geometry.Length, 1e-6);
+            AssertMatchesDrawing("reversed merge", db, a2);
 
             // --- B mirrored (X scale -1): axis -X as well, through the nested transform.
-            ObjectId mirrored = Insert(db, W600, 305500, 100040, 0, true, 2000);
-            plan = PlanFor(db, a, 300500, 100300, mirrored, 304500, 100340);
-            TestLog.True("mirrored plan", plan.Error == null && plan.Join.Kind == JoinKind.Direct, plan.Error ?? plan.Note);
+            ObjectId a3 = Insert(db, W600, 300000, 160000, 0, false, 2000);
+            ObjectId mirrored = Insert(db, W600, 305500, 160040, 0, true, 2000);
+            plan = PlanFor(db, a3, 300500, 160300, mirrored, 304500, 160340);
+            TestLog.True("mirrored plan", plan.Error == null && plan.Merge, plan.Error ?? plan.Note);
             DuctAligner.Apply(db, plan, true, out message);
-            joined = Read(db, mirrored);
-            TestLog.Near("mirrored B length reaches A", 3500, joined.Geometry.Length, 1e-6);
-            TestLog.Near("mirrored B aligned", 100000, joined.Geometry.Start.Y, 1e-6);
-            AssertMatchesDrawing("mirrored B", db, mirrored);
+            TestLog.True("mirrored B is erased", mirrored.IsErased);
+            joined = Read(db, a3);
+            TestLog.Near("mirrored merge length", 5500, joined.Geometry.Length, 1e-6);
+            TestLog.Near("mirrored merge y", 160000, joined.Geometry.Start.Y, 1e-6);
+            AssertMatchesDrawing("mirrored merge", db, a3);
+
+            // --- B before A's start: the merged block starts at B's far end (296000).
+            ObjectId a4 = Insert(db, W600, 300000, 170000, 0, false, 2000);
+            ObjectId before = Insert(db, W600, 296000, 170040, 0, false, 2000);
+            plan = PlanFor(db, a4, 300500, 170300, before, 297000, 170340);
+            TestLog.True("before plan", plan.Error == null && plan.Merge, plan.Error ?? plan.Note);
+            DuctAligner.Apply(db, plan, true, out message);
+            TestLog.True("before B is erased", before.IsErased);
+            joined = Read(db, a4);
+            TestLog.Near("before merge start x", 296000, joined.Geometry.Start.X, 1e-6);
+            TestLog.Near("before merge length", 6000, joined.Geometry.Length, 1e-6);
+            AssertMatchesDrawing("before merge", db, a4);
 
             // --- Different widths: an eccentric transition with the flat side on the aligned edge
             ObjectId narrow = Insert(db, DuctSize.Rect(400, 300), 303500, 100150, 0, false, 2000);

@@ -19,6 +19,13 @@ namespace HvacAiCadAddin.Ducts
         public JoinPlan Join = new JoinPlan();
         /// <summary>Extra information for the user, such as why no join is offered.</summary>
         public string Note;
+        /// <summary>
+        /// A direct join of two ducts of the same size: A is stretched over B's far end and B is
+        /// erased, leaving one block.
+        /// </summary>
+        public bool Merge;
+        public Vec2 MergedStart;
+        public double MergedLength;
     }
 
     // Non-interactive part of HVACDUCTALIGN: edge extraction from picked entities, the plan, and the
@@ -179,7 +186,16 @@ namespace HvacAiCadAddin.Ducts
 
             plan.Join = DuctAlignMath.PlanJoin(a.Geometry, moved, referenceFrom, settings);
             if (plan.Join.Kind == JoinKind.None)
-                plan.Note = "No join is offered: " + plan.Join.Reason + ".";
+                plan.Note = "No join is made: " + plan.Join.Reason + ".";
+
+            // Same size end to end: one block from A's far end to B's far end. With equal widths
+            // but different heights the two blocks stay separate (B is resized to meet A).
+            if (plan.Join.Kind == JoinKind.Direct && a.Size.Equals(b.Size))
+            {
+                plan.Merge = true;
+                DuctAlignMath.MergedSpan(a.Geometry, moved, out plan.MergedStart, out plan.MergedLength);
+            }
+
             return plan;
         }
 
@@ -196,6 +212,28 @@ namespace HvacAiCadAddin.Ducts
                 {
                     BlockReference block = (BlockReference)transaction.GetObject(
                         plan.B.Id, OpenMode.ForWrite);
+
+                    if (join && plan.Merge)
+                    {
+                        BlockReference blockA = (BlockReference)transaction.GetObject(
+                            plan.A.Id, OpenMode.ForRead);
+                        Point3d mergedPosition = new Point3d(
+                            plan.MergedStart.X, plan.MergedStart.Y, blockA.Position.Z);
+                        if (!DuctBlockLibrary.SetDuctState(
+                            transaction, plan.A.Id, mergedPosition, plan.MergedLength))
+                        {
+                            message = "Could not set Distance3 on the reference duct.";
+                            return false;
+                        }
+
+                        block.Erase();
+                        transaction.Commit();
+                        message = "Joined into one " + plan.A.Size.Label + " duct, "
+                            + plan.MergedLength.ToString("0.##", CultureInfo.InvariantCulture)
+                            + " mm long.";
+                        return true;
+                    }
+
                     Point3d position = block.Position
                         + new Vector3d(plan.Translation.X, plan.Translation.Y, 0);
                     double distance = plan.B.Distance3;
