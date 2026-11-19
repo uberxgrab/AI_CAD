@@ -463,6 +463,10 @@ namespace HvacAiCadAddin.Commands
             private readonly Point3d _firstCorner;
             private readonly Point3d _oppositeCorner;
             private readonly Point3d _basePoint;
+            // References the preview has changed and must put back. A fully
+            // crossed reference is never changed here, so native STRETCH's
+            // move of it survives Restore().
+            private readonly HashSet<ObjectId> _previewedBlocks = new HashSet<ObjectId>();
             private Point3d _lastCursorPoint;
             private bool _hasCursorPoint;
             private bool _isRestored;
@@ -534,7 +538,8 @@ namespace HvacAiCadAddin.Commands
                         if (block == null || block.IsErased || !block.IsDynamicBlock)
                             continue;
 
-                        RestoreBlockState(block, candidate);
+                        if (_previewedBlocks.Remove(candidate.ObjectId))
+                            RestoreBlockState(block, candidate);
 
                         AxisInfo axis = candidate.GetAxisFor(displacement);
                         if (axis == null)
@@ -557,6 +562,7 @@ namespace HvacAiCadAddin.Commands
                             ? propertyDisplacement
                             : -propertyDisplacement;
 
+                        _previewedBlocks.Add(candidate.ObjectId);
                         if (DynamicBlockHelpers.TrySetDistancePropertyValue(
                             block,
                             candidate.PropertyName,
@@ -591,6 +597,9 @@ namespace HvacAiCadAddin.Commands
                 {
                     foreach (DynamicBlockCandidate candidate in _dynamicBlocks)
                     {
+                        if (!_previewedBlocks.Contains(candidate.ObjectId))
+                            continue;
+
                         BlockReference block = transaction.GetObject(
                             candidate.ObjectId,
                             OpenMode.ForWrite,
@@ -605,6 +614,7 @@ namespace HvacAiCadAddin.Commands
                     transaction.Commit();
                 }
 
+                _previewedBlocks.Clear();
                 _editor.UpdateScreen();
                 _isRestored = true;
             }
