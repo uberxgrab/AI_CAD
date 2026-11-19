@@ -1,0 +1,168 @@
+using HvacAiCadAddin.Pipes;
+
+namespace PipeCoreTests
+{
+    /// <summary>The remembered dialog values: defaults, round trips and bad input.</summary>
+    internal static class SettingsTests
+    {
+        public static void Run()
+        {
+            PipeSizeDefaults();
+            PipeSizeRoundTrip();
+            PipeSizeBadInput();
+            RefrigDefaults();
+            RefrigRoundTrip();
+            RefrigBadInput();
+            RefrigValidation();
+        }
+
+        private static void PipeSizeDefaults()
+        {
+            Check.Case("pipe size defaults", () =>
+            {
+                PipeSizeSettings settings = new PipeSizeSettings();
+                Check.Equal("kind", PipeKind.Chws, settings.Kind);
+                Check.Equal("size", "DN100", settings.SizeText);
+                Check.Near("weld", 1.0, settings.WeldTolerance);
+                string error;
+                Check.True("valid", settings.IsValid(out error));
+                Check.Equal("empty text keeps defaults", "DN100", PipeSizeSettings.Deserialize("").SizeText);
+                Check.Equal("null text keeps defaults", "DN100", PipeSizeSettings.Deserialize(null).SizeText);
+            });
+        }
+
+        private static void PipeSizeRoundTrip()
+        {
+            Check.Case("pipe size round trip", () =>
+            {
+                PipeSizeSettings settings = new PipeSizeSettings
+                {
+                    Kind = PipeKind.Refrigerant,
+                    SizeText = "28.6-12.7 (33.6-44.8)",
+                    WeldTolerance = 2.5
+                };
+                PipeSizeSettings back = PipeSizeSettings.Deserialize(settings.Serialize());
+                Check.Equal("kind", PipeKind.Refrigerant, back.Kind);
+                Check.Equal("size", "28.6-12.7 (33.6-44.8)", back.SizeText);
+                Check.Near("weld", 2.5, back.WeldTolerance);
+                Check.Contains("weld is written with a point", settings.Serialize(), "weld=2.5");
+            });
+        }
+
+        private static void PipeSizeBadInput()
+        {
+            Check.Case("pipe size bad input", () =>
+            {
+                PipeSizeSettings back = PipeSizeSettings.Deserialize(
+                    "type=Hws\nsize=DN32\nweld=abc\nunknown=1\nnonsense\n=3\n");
+                Check.Equal("kind survives", PipeKind.Hws, back.Kind);
+                Check.Equal("size survives", "DN32", back.SizeText);
+                Check.Near("bad weld keeps default", 1.0, back.WeldTolerance);
+
+                PipeSizeSettings mismatch = PipeSizeSettings.Deserialize("type=Condensate\nsize=DN100\n");
+                Check.Equal("kind kept", PipeKind.Condensate, mismatch.Kind);
+                Check.Equal("size falls back to the type's first", "DN21", mismatch.SizeText);
+
+                PipeSizeSettings badType = PipeSizeSettings.Deserialize("type=99\nsize=DN40\n");
+                string error;
+                Check.True("bad type still valid", badType.IsValid(out error));
+
+                PipeSizeSettings outOfRange = PipeSizeSettings.Deserialize("weld=5000\n");
+                Check.Near("out of range weld keeps default", 1.0, outOfRange.WeldTolerance);
+            });
+        }
+
+        private static void RefrigDefaults()
+        {
+            Check.Case("refrigerant defaults", () =>
+            {
+                RefrigSettings s = new RefrigSettings();
+                Check.Near("weld", 50, s.WeldTolerance);
+                Check.Near("angle", 10, s.AngleToleranceDegrees);
+                Check.Near("align", 200, s.AlignTolerance);
+                Check.Near("jog", 200, s.JogTolerance);
+                Check.Near("scale", 1.24, s.RefnetScale);
+                Check.True("UCS X", s.UseUcsBaseAngle);
+                string error;
+                Check.True("valid", s.IsValid(out error));
+                Check.Equal("block name", "Branch Connection (1)", RefrigSettings.RefnetBlockName);
+                Check.Near("inlet to main outlet", 750, RefrigSettings.RefnetLength);
+                Check.Near("branch offset", 200, RefrigSettings.RefnetBranchOffset);
+            });
+        }
+
+        private static void RefrigRoundTrip()
+        {
+            Check.Case("refrigerant round trip", () =>
+            {
+                RefrigSettings s = new RefrigSettings
+                {
+                    WeldTolerance = 35.5,
+                    AngleToleranceDegrees = 7.5,
+                    AlignTolerance = 150,
+                    JogTolerance = 120.25,
+                    RefnetScale = 1.35,
+                    UseUcsBaseAngle = false,
+                    BaseAngleDegrees = 12.5
+                };
+                RefrigSettings back = RefrigSettings.Deserialize(s.Serialize());
+                Check.Near("weld", 35.5, back.WeldTolerance);
+                Check.Near("angle", 7.5, back.AngleToleranceDegrees);
+                Check.Near("align", 150, back.AlignTolerance);
+                Check.Near("jog", 120.25, back.JogTolerance);
+                Check.Near("scale", 1.35, back.RefnetScale);
+                Check.False("custom base angle", back.UseUcsBaseAngle);
+                Check.Near("base angle", 12.5, back.BaseAngleDegrees);
+                Check.Contains("scale is written with a point", s.Serialize(), "scale=1.35");
+            });
+        }
+
+        private static void RefrigBadInput()
+        {
+            Check.Case("refrigerant bad input", () =>
+            {
+                RefrigSettings back = RefrigSettings.Deserialize("weld=abc\nscale=2\nangle=30\n");
+                // An invalid value drops the whole file back to the defaults.
+                Check.Near("weld default", 50, back.WeldTolerance);
+                Check.Near("scale default", 1.24, back.RefnetScale);
+                Check.Near("angle default", 10, back.AngleToleranceDegrees);
+
+                RefrigSettings ok = RefrigSettings.Deserialize("weld=abc\nscale=2\nunknown=7\n");
+                Check.Near("good scale kept", 2, ok.RefnetScale);
+                Check.Near("bad weld ignored", 50, ok.WeldTolerance);
+            });
+        }
+
+        private static void Invalid(string label, System.Action<RefrigSettings> change, string fragment)
+        {
+            Check.Case(label, () =>
+            {
+                RefrigSettings s = new RefrigSettings();
+                change(s);
+                string error;
+                Check.False(label, s.IsValid(out error));
+                Check.Contains(label + " message", error, fragment);
+            });
+        }
+
+        private static void RefrigValidation()
+        {
+            Invalid("zero weld", s => s.WeldTolerance = 0, "weld tolerance");
+            Invalid("huge weld", s => s.WeldTolerance = 5000, "weld tolerance");
+            Invalid("zero angle", s => s.AngleToleranceDegrees = 0, "angle tolerance");
+            Invalid("angle above 22.5", s => s.AngleToleranceDegrees = 22.6, "angle tolerance");
+            Invalid("negative align", s => s.AlignTolerance = -1, "align tolerance");
+            Invalid("negative jog", s => s.JogTolerance = -1, "jog tolerance");
+            Invalid("zero scale", s => s.RefnetScale = 0, "refnet scale");
+            Invalid("NaN scale", s => s.RefnetScale = double.NaN, "refnet scale");
+            Invalid("NaN base angle", s => s.BaseAngleDegrees = double.NaN, "base angle");
+
+            Check.Case("edge values are valid", () =>
+            {
+                RefrigSettings s = new RefrigSettings { AngleToleranceDegrees = 22.5, AlignTolerance = 0, JogTolerance = 0 };
+                string error;
+                Check.True("22.5 degrees, zero tolerances", s.IsValid(out error));
+            });
+        }
+    }
+}

@@ -1,0 +1,1535 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using HvacAiCadAddin.Ducts;
+
+namespace HvacAiCadAddin.Pipes
+{
+    // AutoCAD-free core of HVACREFRIG: cleans a rough refrigerant pipe network and finds the refnet
+    // (branch joint) positions. The order of the cleaning steps is fixed (AGENTS.md, "HVACREFRIG"):
+    // weld, T-splits, classify, chain, cluster, collapse jogs, delete zero-length edges, dissolve
+    // collinear nodes. The result is checked before anything is written. Straight segments only.
+
+    public sealed class RefrigInput
+    {
+        public IList<PipeCurve> Curves = new List<PipeCurve>();
+        public RefrigSettings Settings = new RefrigSettings();
+
+        /// <summary>The base direction (radians from world X): horizontal is along it, vertical across it.</summary>
+        public double BaseAngle;
+
+        /// <summary>A point near the outdoor-unit end of the network; null skips the refnets.</summary>
+        public Vec2? RootPoint;
+
+        /// <summary>The root must be a pipe end this close to <see cref="RootPoint"/> (mm).</summary>
+        public double RootTolerance = 500;
+
+        /// <summary>Port points of refnet blocks already in the drawing.</summary>
+        public IList<Vec2> ExistingRefnetPorts = new List<Vec2>();
+    }
+
+    /// <summary>One cleaned pipe run, to be written as one polyline.</summary>
+    public sealed class RefrigPath
+    {
+        public string Layer;
+        public double Elevation;
+        /// <summary>The <see cref="PipeCurve.Id"/> that contributed most length; its properties are copied.</summary>
+        public int SourceCurve;
+        public readonly List<Vec2> Points = new List<Vec2>();
+    }
+
+    public sealed class RefnetPlacement
+    {
+        /// <summary>The degree-3 node the refnet replaces.</summary>
+        public Vec2 Node;
+        /// <summary>Insertion point: the block's inlet.</summary>
+        public Vec2 Inlet;
+        /// <summary>Unit direction from the inlet toward the main outlet.</summary>
+        public Vec2 Direction;
+        /// <summary>True when the branch is on the left of <see cref="Direction"/>.</summary>
+        public bool Mirrored;
+        public double Scale;
+        public string Layer;
+        public double Elevation;
+        public Vec2 MainPort;
+        public Vec2 BranchPort;
+
+        /// <summary>Block rotation: along the direction, plus 180 degrees when mirrored.</summary>
+        public double Rotation
+        {
+            get { return Direction.Angle + (Mirrored ? Math.PI : 0); }
+        }
+
+        /// <summary>Block X scale: negative when mirrored.</summary>
+        public double XScale
+        {
+            get { return Mirrored ? -Scale : Scale; }
+        }
+    }
+
+    public sealed class RefrigResult
+    {
+        public bool Ok;
+        public string Error;
+        /// <summary>Where a failed check found its problem, for a highlight.</summary>
+        public readonly List<Vec2> ErrorPoints = new List<Vec2>();
+        public readonly List<RefrigPath> Paths = new List<RefrigPath>();
+        public readonly List<RefnetPlacement> Refnets = new List<RefnetPlacement>();
+        /// <summary>Cases the command reports and leaves alone.</summary>
+        public readonly List<string> Reports = new List<string>();
+        public readonly List<Vec2> ReportPoints = new List<Vec2>();
+
+        /// <summary>False when the network is already clean and no refnet is due: nothing to write.</summary>
+        public bool Changed;
+        public int Components;
+        public int Anchors;
+        public int NodesMoved;
+        public int DuplicatesRemoved;
+        public int ZeroLengthRemoved;
+        public int NodesDissolved;
+        public int JogsMerged;
+    }
+
+    public static class RefrigCleaner
+    {
+        public static RefrigResult Run(RefrigInput input)
+        {
+            RefrigResult result = new RefrigResult();
+            new Engine(input, result).Execute();
+            return result;
+        }
+
+        /// <summary>Distance between two segments, and the point on the first that is nearest.</summary>
+        internal static double SegmentDistance(Vec2 p1, Vec2 p2, Vec2 q1, Vec2 q2, out Vec2 at)
+        {
+            Vec2 d1 = p2 - p1;
+            Vec2 d2 = q2 - q1;
+            double denominator = d1.Cross(d2);
+            double scale = d1.Length * d2.Length;
+            if (scale > 1e-18 && Math.Abs(denominator) > 1e-12 * scale)
+            {
+                double t = (q1 - p1).Cross(d2) / denominator;
+                double u = (q1 - p1).Cross(d1) / denominator;
+                if (t >= 0 && t <= 1 && u >= 0 && u <= 1)
+                {
+                    at = p1 + d1 * t;
+                    return 0;
+                }
+            }
+
+            double best = double.MaxValue;
+            at = p1;
+            Consider(p1, q1, q2, ref best, ref at, true);
+            Consider(p2, q1, q2, ref best, ref at, true);
+            Consider(q1, p1, p2, ref best, ref at, false);
+            Consider(q2, p1, p2, ref best, ref at, false);
+            return best;
+        }
+
+        private static void Consider(Vec2 p, Vec2 a, Vec2 b, ref double best, ref Vec2 at, bool pointOnFirst)
+        {
+            double distance;
+            double f = PipeSeg.Project(a, b, 0, p, out distance);
+            if (distance < best)
+            {
+                best = distance;
+                at = pointOnFirst ? p : a + (b - a) * f;
+            }
+        }
+
+        /// <summary>
+        /// Groups the chains of one direction class into clusters that will share one line. Chains that
+        /// are pinned to an anchor go first, by pin value; the others join the nearest cluster that can
+        /// take them. A chain can join a cluster only if its projection along the line does not overlap
+        /// any member's (by more than <paramref name="overlapTolerance"/>), its pin matches the
+        /// cluster's, and the cluster's span stays within <paramref name="alignTolerance"/>.
+        /// The span cap stops merges from chaining on: with a cap of 200, chains at 0, 120 and 240 end
+        /// up as two clusters, not one.
+        /// </summary>
+        internal static List<Cluster> ClusterChains(
+            IList<Chain> chains, int cls, double alignTolerance, double overlapTolerance)
+        {
+            List<Chain> pinned = new List<Chain>();
+            List<Chain> free = new List<Chain>();
+            foreach (Chain chain in chains)
+            {
+                if (chain.HasPin)
+                    pinned.Add(chain);
+                else
+                    free.Add(chain);
+            }
+
+            pinned.Sort((p, q) =>
+            {
+                int byPin = p.Pin.CompareTo(q.Pin);
+                return byPin != 0 ? byPin : p.Lo.CompareTo(q.Lo);
+            });
+            free.Sort((p, q) =>
+            {
+                int byMean = p.Mean.CompareTo(q.Mean);
+                return byMean != 0 ? byMean : p.Lo.CompareTo(q.Lo);
+            });
+
+            List<Cluster> clusters = new List<Cluster>();
+            foreach (Chain chain in pinned)
+                AssignChain(clusters, chain, cls, alignTolerance, overlapTolerance);
+            foreach (Chain chain in free)
+                AssignChain(clusters, chain, cls, alignTolerance, overlapTolerance);
+            return clusters;
+        }
+
+        private static bool CanJoin(Cluster cluster, Chain chain, double alignTolerance, double overlapTolerance)
+        {
+            if (chain.HasPin && cluster.HasPin && Math.Abs(chain.Pin - cluster.Pin) > PinEquality)
+                return false;
+
+            double min = chain.Effective;
+            double max = chain.Effective;
+            foreach (Chain member in cluster.Members)
+            {
+                double overlap = Math.Min(member.Hi, chain.Hi) - Math.Max(member.Lo, chain.Lo);
+                if (overlap > overlapTolerance)
+                    return false;
+                min = Math.Min(min, member.Effective);
+                max = Math.Max(max, member.Effective);
+            }
+
+            return max - min <= alignTolerance + 1e-9;
+        }
+
+        private static void AssignChain(
+            List<Cluster> clusters, Chain chain, int cls, double alignTolerance, double overlapTolerance)
+        {
+            Cluster best = null;
+            double bestDifference = double.MaxValue;
+            foreach (Cluster cluster in clusters)
+            {
+                if (!CanJoin(cluster, chain, alignTolerance, overlapTolerance))
+                    continue;
+                double difference = Math.Abs(cluster.Coord - chain.Effective);
+                if (difference < bestDifference)
+                {
+                    bestDifference = difference;
+                    best = cluster;
+                }
+            }
+
+            if (best == null)
+            {
+                best = new Cluster { Class = cls };
+                clusters.Add(best);
+            }
+
+            best.Members.Add(chain);
+            chain.Cluster = best;
+            if (chain.HasPin && !best.HasPin)
+            {
+                best.HasPin = true;
+                best.Pin = chain.Pin;
+            }
+
+            best.Recompute();
+        }
+
+        // ------------------------------------------------------------------------------------------
+
+        private sealed class CNode
+        {
+            public int Id;
+            public Vec2 P;
+            public Vec2 Orig;
+            public bool Anchor;
+            public bool Dead;
+            public int MergedInto = -1;
+            public readonly List<int> Edges = new List<int>();
+        }
+
+        private sealed class CEdge
+        {
+            public int Id;
+            public int A;
+            public int B;
+            public string Layer;
+            public int Curve;
+            public readonly HashSet<int> Src = new HashSet<int>();
+            public bool Dead;
+            public int Class = Other;
+            public int Chain = -1;
+
+            public int OtherNode(int node)
+            {
+                return node == A ? B : A;
+            }
+        }
+
+        internal sealed class Chain
+        {
+            public int Id;
+            public int Class;
+            public readonly List<int> Edges = new List<int>();
+            public readonly HashSet<int> Nodes = new HashSet<int>();
+            public double Mean;
+            public double Weight;
+            public double Lo;
+            public double Hi;
+            public bool HasPin;
+            public double Pin;
+            public Cluster Cluster;
+
+            public double Effective
+            {
+                get { return HasPin ? Pin : Mean; }
+            }
+        }
+
+        internal sealed class Cluster
+        {
+            public int Id;
+            public int Class;
+            public readonly List<Chain> Members = new List<Chain>();
+            public bool HasPin;
+            public double Pin;
+            public double Coord;
+
+            public void Recompute()
+            {
+                if (HasPin)
+                {
+                    Coord = Pin;
+                    return;
+                }
+
+                double sum = 0;
+                double weight = 0;
+                foreach (Chain chain in Members)
+                {
+                    sum += chain.Mean * chain.Weight;
+                    weight += chain.Weight;
+                }
+
+                Coord = weight > 0 ? sum / weight : Members[0].Mean;
+            }
+        }
+
+        private sealed class InitialEdge
+        {
+            public int A;
+            public int B;
+            public Vec2 P;
+            public Vec2 Q;
+        }
+
+        private struct Conflict
+        {
+            public int X;
+            public int Y;
+            public Vec2 At;
+        }
+
+        // Edge classes against the base angle.
+        private const int Horizontal = 0;
+        private const int Vertical = 1;
+        private const int Diagonal45 = 2;
+        private const int Diagonal135 = 3;
+        private const int Other = 4;
+
+        private const double ZeroLength = 1e-3;
+        private const double CollinearDeviation = 0.01;
+        private const double PinEquality = 1e-6;
+        private const double AnchorMoveTolerance = 1e-5;
+        private const double ConflictDistance = 1e-6;
+
+        private sealed class Engine
+        {
+            private readonly RefrigInput _input;
+            private readonly RefrigResult _result;
+            private readonly RefrigSettings _settings;
+            private readonly double _angleTolerance;
+            private readonly List<CNode> _nodes = new List<CNode>();
+            private readonly List<CEdge> _edges = new List<CEdge>();
+            private readonly List<InitialEdge> _initial = new List<InitialEdge>();
+            private readonly List<Chain> _chains = new List<Chain>();
+            private readonly List<Cluster> _clusters = new List<Cluster>();
+            private int _root = -1;
+            private int _initialComponents;
+
+            public Engine(RefrigInput input, RefrigResult result)
+            {
+                _input = input;
+                _result = result;
+                _settings = input.Settings;
+                _angleTolerance = _settings.AngleToleranceDegrees * Math.PI / 180.0;
+            }
+
+            private bool Fail(string message, params Vec2[] points)
+            {
+                _result.Ok = false;
+                _result.Error = message;
+                _result.ErrorPoints.AddRange(points);
+                return false;
+            }
+
+            private static string Num(double value)
+            {
+                return value.ToString("0.#", CultureInfo.InvariantCulture);
+            }
+
+            private static string At(Vec2 point)
+            {
+                return "(" + Num(point.X) + ", " + Num(point.Y) + ")";
+            }
+
+            public void Execute()
+            {
+                string settingsError;
+                if (!_settings.IsValid(out settingsError))
+                {
+                    Fail(settingsError);
+                    return;
+                }
+
+                if (_input.Curves.Count == 0)
+                {
+                    Fail("There are no lines or polylines to clean.");
+                    return;
+                }
+
+                foreach (PipeCurve curve in _input.Curves)
+                {
+                    if (curve.HasArcs)
+                    {
+                        Fail("A polyline has arc segments. HVACREFRIG handles straight segments only; "
+                            + "explode or redraw the arcs first.", curve.SegmentStart(0));
+                        return;
+                    }
+                }
+
+                if (!BuildGraph())
+                    return;
+
+                ClassifyEdges();
+                BuildChains();
+                BuildClusters();
+                Solve();
+                MergeJogs();
+                RemoveZeroLength();
+                DissolveCollinear();
+
+                if (!Validate())
+                    return;
+
+                _result.Ok = true;
+                _result.Components = _initialComponents;
+                CountMoved();
+
+                if (_input.RootPoint.HasValue)
+                    PlaceRefnets();
+
+                BuildPaths();
+                _result.Changed = _weldMoved
+                    || _result.NodesMoved > 0
+                    || _result.DuplicatesRemoved > 0
+                    || _result.ZeroLengthRemoved > 0
+                    || _result.NodesDissolved > 0
+                    || _result.JogsMerged > 0
+                    || _result.Refnets.Count > 0;
+            }
+
+            // ------------------------------------------------------------------ 1-2. weld and T nodes
+
+            private bool _weldMoved;
+
+            private bool BuildGraph()
+            {
+                PipeNetwork net = PipeNetwork.Build(_input.Curves, _settings.WeldTolerance);
+                foreach (NetworkNode source in net.Nodes)
+                {
+                    Vec2 p = source.IsTNode ? source.HostPoint : source.Point;
+                    _nodes.Add(new CNode { Id = source.Index, P = p, Orig = p });
+                }
+
+                Dictionary<long, int> byPair = new Dictionary<long, int>();
+                foreach (NetworkEdge source in net.Edges)
+                {
+                    int a = Math.Min(source.NodeA, source.NodeB);
+                    int b = Math.Max(source.NodeA, source.NodeB);
+                    long key = ((long)a << 32) | (uint)b;
+                    int existing;
+                    if (byPair.TryGetValue(key, out existing))
+                    {
+                        // A pipe drawn twice over the same two nodes.
+                        _result.DuplicatesRemoved++;
+                        continue;
+                    }
+
+                    CEdge edge = new CEdge
+                    {
+                        Id = _edges.Count,
+                        A = source.NodeA,
+                        B = source.NodeB,
+                        Layer = source.Layer,
+                        Curve = source.Curve
+                    };
+                    edge.Src.Add(edge.Id);
+                    byPair[key] = edge.Id;
+                    _edges.Add(edge);
+                    _nodes[edge.A].Edges.Add(edge.Id);
+                    _nodes[edge.B].Edges.Add(edge.Id);
+                    _initial.Add(new InitialEdge
+                    {
+                        A = edge.A,
+                        B = edge.B,
+                        P = _nodes[edge.A].P,
+                        Q = _nodes[edge.B].P
+                    });
+
+                    if (source.PointA.DistanceTo(_nodes[edge.A].P) > 1e-6
+                        || source.PointB.DistanceTo(_nodes[edge.B].P) > 1e-6)
+                        _weldMoved = true;
+                }
+
+                if (_edges.Count == 0)
+                    return Fail("There are no pipe segments to clean.");
+
+                int[] parent = NewParents(_nodes.Count);
+                foreach (CEdge edge in _edges)
+                {
+                    int ra = FindRoot(parent, edge.A);
+                    int rb = FindRoot(parent, edge.B);
+                    if (ra == rb)
+                    {
+                        return Fail(
+                            "The network has a loop near " + At(_nodes[edge.A].P)
+                            + ". HVACREFRIG expects a tree: break the loop first.",
+                            _nodes[edge.A].P);
+                    }
+
+                    parent[rb] = ra;
+                }
+
+                _initialComponents = CountComponents();
+
+                foreach (CNode node in _nodes)
+                {
+                    if (node.Edges.Count == 1)
+                    {
+                        node.Anchor = true;
+                        _result.Anchors++;
+                        _anchorIds.Add(node.Id);
+                        _anchorOrig.Add(node.P);
+                    }
+                    else if (node.Edges.Count == 0)
+                    {
+                        node.Dead = true;
+                    }
+                }
+
+                if (_input.RootPoint.HasValue)
+                {
+                    Vec2 pick = _input.RootPoint.Value;
+                    double best = double.MaxValue;
+                    foreach (CNode node in _nodes)
+                    {
+                        if (!node.Anchor)
+                            continue;
+                        double distance = node.P.DistanceTo(pick);
+                        if (distance < best)
+                        {
+                            best = distance;
+                            _root = node.Id;
+                        }
+                    }
+
+                    if (_root < 0 || best > _input.RootTolerance)
+                    {
+                        _root = -1;
+                        return Fail(
+                            "No pipe end lies within " + Num(_input.RootTolerance)
+                            + " mm of the picked root point. Pick the outdoor-unit end of the network.");
+                    }
+                }
+
+                return true;
+            }
+
+            private static int[] NewParents(int count)
+            {
+                int[] parent = new int[count];
+                for (int i = 0; i < count; i++)
+                    parent[i] = i;
+                return parent;
+            }
+
+            private static int FindRoot(int[] parent, int i)
+            {
+                while (parent[i] != i)
+                {
+                    parent[i] = parent[parent[i]];
+                    i = parent[i];
+                }
+
+                return i;
+            }
+
+            private int CountComponents()
+            {
+                int[] parent = NewParents(_nodes.Count);
+                foreach (CEdge edge in _edges)
+                {
+                    if (edge.Dead)
+                        continue;
+                    int ra = FindRoot(parent, edge.A);
+                    int rb = FindRoot(parent, edge.B);
+                    if (ra != rb)
+                        parent[rb] = ra;
+                }
+
+                HashSet<int> roots = new HashSet<int>();
+                foreach (CNode node in _nodes)
+                {
+                    if (!node.Dead && node.Edges.Count > 0)
+                        roots.Add(FindRoot(parent, node.Id));
+                }
+
+                return roots.Count;
+            }
+
+            // ------------------------------------------------------------------ 3. classify
+
+            private Vec2 Direction(int cls)
+            {
+                double[] offsets = { 0, Math.PI / 2, Math.PI / 4, 3 * Math.PI / 4 };
+                return Vec2.FromAngle(_input.BaseAngle + offsets[cls]);
+            }
+
+            private Vec2 Normal(int cls)
+            {
+                return Direction(cls).Left;
+            }
+
+            private static int Perpendicular(int cls)
+            {
+                return cls < 2 ? 1 - cls : 5 - cls;
+            }
+
+            private int Classify(Vec2 from, Vec2 to)
+            {
+                Vec2 v = to - from;
+                if (v.Length < 1e-9)
+                    return Other;
+
+                double phi = Math.Atan2(v.Y, v.X) - _input.BaseAngle;
+                phi = phi % Math.PI;
+                if (phi < 0)
+                    phi += Math.PI;
+
+                double tolerance = _angleTolerance;
+                if (phi <= tolerance || phi >= Math.PI - tolerance)
+                    return Horizontal;
+                if (Math.Abs(phi - Math.PI / 2) <= tolerance)
+                    return Vertical;
+                if (Math.Abs(phi - Math.PI / 4) <= tolerance)
+                    return Diagonal45;
+                if (Math.Abs(phi - 3 * Math.PI / 4) <= tolerance)
+                    return Diagonal135;
+                return Other;
+            }
+
+            private void ClassifyEdges()
+            {
+                foreach (CEdge edge in _edges)
+                    edge.Class = Classify(_nodes[edge.A].P, _nodes[edge.B].P);
+            }
+
+            // ------------------------------------------------------------------ 4. chains
+
+            private double EdgeLength(CEdge edge)
+            {
+                return _nodes[edge.A].P.DistanceTo(_nodes[edge.B].P);
+            }
+
+            private void BuildChains()
+            {
+                int[] parent = NewParents(_edges.Count);
+                foreach (CNode node in _nodes)
+                {
+                    if (node.Dead || node.Edges.Count != 2)
+                        continue;
+                    CEdge first = _edges[node.Edges[0]];
+                    CEdge second = _edges[node.Edges[1]];
+                    if (first.Id == second.Id || first.Class == Other || first.Class != second.Class)
+                        continue;
+                    int ra = FindRoot(parent, first.Id);
+                    int rb = FindRoot(parent, second.Id);
+                    if (ra != rb)
+                        parent[rb] = ra;
+                }
+
+                Dictionary<int, Chain> byRoot = new Dictionary<int, Chain>();
+                foreach (CEdge edge in _edges)
+                {
+                    if (edge.Class == Other)
+                        continue;
+                    int root = FindRoot(parent, edge.Id);
+                    Chain chain;
+                    if (!byRoot.TryGetValue(root, out chain))
+                    {
+                        chain = new Chain { Id = _chains.Count, Class = edge.Class };
+                        byRoot[root] = chain;
+                        _chains.Add(chain);
+                    }
+
+                    chain.Edges.Add(edge.Id);
+                    chain.Nodes.Add(edge.A);
+                    chain.Nodes.Add(edge.B);
+                }
+
+                foreach (Chain chain in _chains)
+                {
+                    Vec2 normal = Normal(chain.Class);
+                    Vec2 direction = Direction(chain.Class);
+                    double sum = 0;
+                    foreach (int id in chain.Edges)
+                    {
+                        CEdge edge = _edges[id];
+                        double length = EdgeLength(edge);
+                        Vec2 mid = (_nodes[edge.A].P + _nodes[edge.B].P) / 2;
+                        sum += normal.Dot(mid) * length;
+                        chain.Weight += length;
+                    }
+
+                    if (chain.Weight > 0)
+                    {
+                        chain.Mean = sum / chain.Weight;
+                    }
+                    else
+                    {
+                        CEdge only = _edges[chain.Edges[0]];
+                        chain.Mean = normal.Dot(_nodes[only.A].P);
+                    }
+
+                    chain.Lo = double.MaxValue;
+                    chain.Hi = double.MinValue;
+                    double pinMin = double.MaxValue;
+                    double pinMax = double.MinValue;
+                    foreach (int nodeId in chain.Nodes)
+                    {
+                        CNode node = _nodes[nodeId];
+                        double along = direction.Dot(node.P);
+                        chain.Lo = Math.Min(chain.Lo, along);
+                        chain.Hi = Math.Max(chain.Hi, along);
+                        if (node.Anchor)
+                        {
+                            double value = normal.Dot(node.P);
+                            pinMin = Math.Min(pinMin, value);
+                            pinMax = Math.Max(pinMax, value);
+                        }
+                    }
+
+                    if (pinMax >= pinMin)
+                    {
+                        if (pinMax - pinMin > PinEquality)
+                        {
+                            // Anchored at both ends off the line: it cannot be made straight without
+                            // moving an anchor, so it stays as drawn.
+                            foreach (int id in chain.Edges)
+                                _edges[id].Class = Other;
+                            chain.Edges.Clear();
+                            continue;
+                        }
+
+                        chain.HasPin = true;
+                        chain.Pin = pinMin;
+                    }
+                }
+
+                _chains.RemoveAll(c => c.Edges.Count == 0);
+                for (int i = 0; i < _chains.Count; i++)
+                {
+                    _chains[i].Id = i;
+                    foreach (int id in _chains[i].Edges)
+                        _edges[id].Chain = i;
+                }
+            }
+
+            // ------------------------------------------------------------------ 5. clusters
+
+            private void BuildClusters()
+            {
+                for (int cls = 0; cls < 4; cls++)
+                {
+                    List<Chain> mine = _chains.FindAll(chain => chain.Class == cls);
+                    foreach (Cluster cluster in ClusterChains(
+                        mine, cls, _settings.AlignTolerance, _settings.WeldTolerance))
+                    {
+                        cluster.Id = _clusters.Count;
+                        _clusters.Add(cluster);
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------------ node positions
+
+            /// <summary>
+            /// Moves each node onto the lines of the clusters its edges belong to: the intersection for
+            /// two directions, or a projection onto the line for one. Nodes with no clustered edge stay.
+            /// </summary>
+            private void Solve()
+            {
+                foreach (CNode node in _nodes)
+                {
+                    if (node.Dead)
+                        continue;
+
+                    List<Cluster> constraints = new List<Cluster>();
+                    foreach (int id in node.Edges)
+                    {
+                        CEdge edge = _edges[id];
+                        if (edge.Chain < 0)
+                            continue;
+                        Cluster cluster = _chains[edge.Chain].Cluster;
+                        if (!constraints.Contains(cluster))
+                            constraints.Add(cluster);
+                    }
+
+                    if (constraints.Count == 0)
+                        continue;
+
+                    double a11 = 0;
+                    double a12 = 0;
+                    double a22 = 0;
+                    double b1 = 0;
+                    double b2 = 0;
+                    foreach (Cluster cluster in constraints)
+                    {
+                        Vec2 n = Normal(cluster.Class);
+                        a11 += n.X * n.X;
+                        a12 += n.X * n.Y;
+                        a22 += n.Y * n.Y;
+                        b1 += cluster.Coord * n.X;
+                        b2 += cluster.Coord * n.Y;
+                    }
+
+                    double determinant = a11 * a22 - a12 * a12;
+                    if (determinant > 1e-6)
+                    {
+                        node.P = new Vec2(
+                            (a22 * b1 - a12 * b2) / determinant,
+                            (a11 * b2 - a12 * b1) / determinant);
+                    }
+                    else
+                    {
+                        // Parallel lines only: slide the node across them to their mean.
+                        Vec2 n = Normal(constraints[0].Class);
+                        double mean = 0;
+                        foreach (Cluster cluster in constraints)
+                            mean += cluster.Coord;
+                        mean /= constraints.Count;
+                        node.P = node.P + n * (mean - n.Dot(node.P));
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------------ 6. jogs
+
+            private CEdge OtherEdgeAt(CNode node, CEdge edge)
+            {
+                return _edges[node.Edges[0] == edge.Id ? node.Edges[1] : node.Edges[0]];
+            }
+
+            private void MergeJogs()
+            {
+                for (int pass = 0; pass < 10; pass++)
+                {
+                    bool merged = false;
+                    foreach (CEdge jog in _edges)
+                    {
+                        if (jog.Dead)
+                            continue;
+                        double length = EdgeLength(jog);
+                        if (length <= ZeroLength || length >= _settings.JogTolerance)
+                            continue;
+
+                        CNode na = _nodes[jog.A];
+                        CNode nb = _nodes[jog.B];
+                        if (na.Edges.Count != 2 || nb.Edges.Count != 2)
+                            continue;
+
+                        CEdge before = OtherEdgeAt(na, jog);
+                        CEdge after = OtherEdgeAt(nb, jog);
+                        if (before.Id == after.Id || before.Chain < 0 || after.Chain < 0
+                            || before.Class != after.Class)
+                            continue;
+                        if (Classify(na.P, nb.P) != Perpendicular(before.Class))
+                            continue;
+
+                        Cluster c1 = _chains[before.Chain].Cluster;
+                        Cluster c2 = _chains[after.Chain].Cluster;
+                        if (c1 == c2)
+                            continue;
+                        if (c1.HasPin && c2.HasPin && Math.Abs(c1.Pin - c2.Pin) > PinEquality)
+                            continue;
+
+                        foreach (Chain chain in c2.Members)
+                        {
+                            chain.Cluster = c1;
+                            c1.Members.Add(chain);
+                        }
+
+                        if (c2.HasPin && !c1.HasPin)
+                        {
+                            c1.HasPin = true;
+                            c1.Pin = c2.Pin;
+                        }
+
+                        c2.Members.Clear();
+                        _clusters.Remove(c2);
+                        c1.Recompute();
+                        _result.JogsMerged++;
+                        merged = true;
+                    }
+
+                    if (!merged)
+                        break;
+                    Solve();
+                }
+            }
+
+            // ------------------------------------------------------------------ 7. zero-length edges
+
+            private void KillEdge(CEdge edge)
+            {
+                edge.Dead = true;
+                _nodes[edge.A].Edges.Remove(edge.Id);
+                _nodes[edge.B].Edges.Remove(edge.Id);
+            }
+
+            private void RemoveZeroLength()
+            {
+                bool again = true;
+                while (again)
+                {
+                    again = false;
+                    foreach (CEdge edge in _edges)
+                    {
+                        if (edge.Dead || EdgeLength(edge) > ZeroLength)
+                            continue;
+                        Contract(edge);
+                        _result.ZeroLengthRemoved++;
+                        again = true;
+                        break;
+                    }
+                }
+            }
+
+            private void Contract(CEdge edge)
+            {
+                CNode a = _nodes[edge.A];
+                CNode b = _nodes[edge.B];
+                if (b.Anchor && !a.Anchor)
+                {
+                    CNode swap = a;
+                    a = b;
+                    b = swap;
+                }
+
+                KillEdge(edge);
+                b.Dead = true;
+                b.MergedInto = a.Id;
+                if (b.Anchor)
+                    a.Anchor = true;
+                if (_root == b.Id)
+                    _root = a.Id;
+
+                foreach (int id in new List<int>(b.Edges))
+                {
+                    CEdge other = _edges[id];
+                    if (other.A == b.Id)
+                        other.A = a.Id;
+                    if (other.B == b.Id)
+                        other.B = a.Id;
+                    a.Edges.Add(id);
+                }
+
+                b.Edges.Clear();
+
+                // The merge can leave two pipes between the same nodes, or a pipe from a node to itself.
+                List<int> list = new List<int>(a.Edges);
+                for (int i = 0; i < list.Count; i++)
+                {
+                    CEdge first = _edges[list[i]];
+                    if (first.Dead)
+                        continue;
+                    if (first.A == first.B)
+                    {
+                        KillEdge(first);
+                        continue;
+                    }
+
+                    for (int j = i + 1; j < list.Count; j++)
+                    {
+                        CEdge second = _edges[list[j]];
+                        if (second.Dead)
+                            continue;
+                        bool same = (first.A == second.A && first.B == second.B)
+                            || (first.A == second.B && first.B == second.A);
+                        if (!same)
+                            continue;
+                        first.Src.UnionWith(second.Src);
+                        KillEdge(second);
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------------ 8. collinear nodes
+
+            private void DissolveCollinear()
+            {
+                bool again = true;
+                while (again)
+                {
+                    again = false;
+                    foreach (CNode node in _nodes)
+                    {
+                        if (node.Dead || node.Anchor || node.Edges.Count != 2 || node.Id == _root)
+                            continue;
+
+                        CEdge first = _edges[node.Edges[0]];
+                        CEdge second = _edges[node.Edges[1]];
+                        if (first.Id == second.Id
+                            || !string.Equals(first.Layer, second.Layer, StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        int u = first.OtherNode(node.Id);
+                        int v = second.OtherNode(node.Id);
+                        if (u == v)
+                            continue;
+
+                        Vec2 pu = _nodes[u].P;
+                        Vec2 pv = _nodes[v].P;
+                        Vec2 span = pv - pu;
+                        double spanLength = span.Length;
+                        if (spanLength < 1e-9)
+                            continue;
+                        double deviation = Math.Abs(span.Cross(node.P - pu)) / spanLength;
+                        if (deviation > CollinearDeviation
+                            || (pu - node.P).Dot(pv - node.P) >= 0)
+                            continue;
+
+                        // Merge the two edges into the first one, from u to v.
+                        double firstLength = EdgeLength(first);
+                        double secondLength = EdgeLength(second);
+                        if (secondLength > firstLength)
+                            first.Curve = second.Curve;
+                        first.Src.UnionWith(second.Src);
+                        second.Dead = true;
+                        _nodes[v].Edges.Remove(second.Id);
+                        _nodes[v].Edges.Add(first.Id);
+                        node.Edges.Clear();
+                        node.Dead = true;
+                        first.A = u;
+                        first.B = v;
+                        _result.NodesDissolved++;
+                        again = true;
+                    }
+                }
+            }
+
+            // ------------------------------------------------------------------ validation
+
+            private bool Validate()
+            {
+                // Same number of connected components.
+                int components = CountComponents();
+                if (components != _initialComponents)
+                {
+                    return Fail(
+                        "Cleaning would change the number of separate pipe networks from "
+                        + _initialComponents + " to " + components + ". Nothing was changed.");
+                }
+
+                // Still a tree.
+                int[] parent = NewParents(_nodes.Count);
+                foreach (CEdge edge in _edges)
+                {
+                    if (edge.Dead)
+                        continue;
+                    int ra = FindRoot(parent, edge.A);
+                    int rb = FindRoot(parent, edge.B);
+                    if (ra == rb)
+                    {
+                        return Fail(
+                            "Cleaning would create a loop near " + At(_nodes[edge.A].P) + ". Nothing was changed.",
+                            _nodes[edge.A].P);
+                    }
+
+                    parent[rb] = ra;
+                }
+
+                // Anchors unmoved.
+                for (int i = 0; i < _anchorIds.Count; i++)
+                {
+                    CNode survivor = _nodes[Resolve(_anchorIds[i])];
+                    Vec2 orig = _anchorOrig[i];
+                    if (survivor.P.DistanceTo(orig) > AnchorMoveTolerance)
+                    {
+                        return Fail(
+                            "Cleaning would move the pipe end at " + At(orig) + ". Nothing was changed.",
+                            orig, survivor.P);
+                    }
+                }
+
+                // No new crossings or overlaps.
+                HashSet<long> old = new HashSet<long>();
+                List<Conflict> before = FindConflicts(InitialGeometry());
+                foreach (Conflict conflict in before)
+                    old.Add(PairKey(conflict.X, conflict.Y));
+
+                List<int> live = new List<int>();
+                foreach (CEdge edge in _edges)
+                {
+                    if (!edge.Dead)
+                        live.Add(edge.Id);
+                }
+
+                List<Conflict> after = FindConflicts(LiveGeometry(live));
+                foreach (Conflict conflict in after)
+                {
+                    CEdge x = _edges[conflict.X];
+                    CEdge y = _edges[conflict.Y];
+                    bool existed = false;
+                    foreach (int sx in x.Src)
+                    {
+                        foreach (int sy in y.Src)
+                        {
+                            if (old.Contains(PairKey(sx, sy)))
+                            {
+                                existed = true;
+                                break;
+                            }
+                        }
+
+                        if (existed)
+                            break;
+                    }
+
+                    if (!existed)
+                    {
+                        return Fail(
+                            "Cleaning would create a new crossing or overlap between pipes near "
+                            + At(conflict.At) + ". Nothing was changed.",
+                            conflict.At);
+                    }
+                }
+
+                return true;
+            }
+
+            private readonly List<int> _anchorIds = new List<int>();
+            private readonly List<Vec2> _anchorOrig = new List<Vec2>();
+
+            private int Resolve(int node)
+            {
+                while (_nodes[node].MergedInto >= 0)
+                    node = _nodes[node].MergedInto;
+                return node;
+            }
+
+            private static long PairKey(int a, int b)
+            {
+                int lo = Math.Min(a, b);
+                int hi = Math.Max(a, b);
+                return ((long)lo << 32) | (uint)hi;
+            }
+
+            private sealed class Geometry
+            {
+                public int Id;
+                public int A;
+                public int B;
+                public Vec2 P;
+                public Vec2 Q;
+            }
+
+            private List<Geometry> InitialGeometry()
+            {
+                List<Geometry> list = new List<Geometry>();
+                for (int i = 0; i < _initial.Count; i++)
+                {
+                    list.Add(new Geometry
+                    {
+                        Id = i,
+                        A = _initial[i].A,
+                        B = _initial[i].B,
+                        P = _initial[i].P,
+                        Q = _initial[i].Q
+                    });
+                }
+
+                return list;
+            }
+
+            private List<Geometry> LiveGeometry(List<int> ids)
+            {
+                List<Geometry> list = new List<Geometry>();
+                foreach (int id in ids)
+                {
+                    CEdge edge = _edges[id];
+                    list.Add(new Geometry
+                    {
+                        Id = id,
+                        A = edge.A,
+                        B = edge.B,
+                        P = _nodes[edge.A].P,
+                        Q = _nodes[edge.B].P
+                    });
+                }
+
+                return list;
+            }
+
+            // Pairs of pipes that cross, touch or overlap without sharing a node, plus pairs that share a
+            // node but fold back over each other. A sweep over the x extents keeps this fast.
+            private static List<Conflict> FindConflicts(List<Geometry> geometry)
+            {
+                List<Conflict> found = new List<Conflict>();
+                geometry.Sort((p, q) =>
+                    Math.Min(p.P.X, p.Q.X).CompareTo(Math.Min(q.P.X, q.Q.X)));
+
+                for (int i = 0; i < geometry.Count; i++)
+                {
+                    Geometry g = geometry[i];
+                    double maxX = Math.Max(g.P.X, g.Q.X) + ConflictDistance;
+                    double minY = Math.Min(g.P.Y, g.Q.Y) - ConflictDistance;
+                    double maxY = Math.Max(g.P.Y, g.Q.Y) + ConflictDistance;
+                    for (int j = i + 1; j < geometry.Count; j++)
+                    {
+                        Geometry h = geometry[j];
+                        if (Math.Min(h.P.X, h.Q.X) > maxX)
+                            break;
+                        if (Math.Max(h.P.Y, h.Q.Y) < minY || Math.Min(h.P.Y, h.Q.Y) > maxY)
+                            continue;
+
+                        Vec2 at;
+                        if (Conflicts(g, h, out at))
+                            found.Add(new Conflict { X = g.Id, Y = h.Id, At = at });
+                    }
+                }
+
+                return found;
+            }
+
+            private static bool Conflicts(Geometry g, Geometry h, out Vec2 at)
+            {
+                at = g.P;
+                int shared = -1;
+                Vec2 farG = g.Q;
+                Vec2 farH = h.Q;
+                Vec2 common = g.P;
+                if (g.A == h.A) { shared = g.A; common = g.P; farG = g.Q; farH = h.Q; }
+                else if (g.A == h.B) { shared = g.A; common = g.P; farG = g.Q; farH = h.P; }
+                else if (g.B == h.A) { shared = g.B; common = g.Q; farG = g.P; farH = h.Q; }
+                else if (g.B == h.B) { shared = g.B; common = g.Q; farG = g.P; farH = h.P; }
+
+                if (shared >= 0)
+                {
+                    Vec2 d1 = (farG - common).Normalized();
+                    Vec2 d2 = (farH - common).Normalized();
+                    at = common;
+                    return d1.Dot(d2) > 0 && Math.Abs(d1.Cross(d2)) < 1e-6;
+                }
+
+                return SegmentDistance(g.P, g.Q, h.P, h.Q, out at) <= ConflictDistance;
+            }
+
+            // ------------------------------------------------------------------ moved nodes
+
+            private void CountMoved()
+            {
+                foreach (CNode node in _nodes)
+                {
+                    if (node.Dead || node.Edges.Count == 0)
+                        continue;
+                    if (node.P.DistanceTo(node.Orig) > 1e-6)
+                        _result.NodesMoved++;
+                }
+            }
+
+            // ------------------------------------------------------------------ refnets
+
+            private int AddNode(Vec2 point)
+            {
+                CNode node = new CNode { Id = _nodes.Count, P = point, Orig = point };
+                _nodes.Add(node);
+                return node.Id;
+            }
+
+            private void Report(string message, Vec2 point)
+            {
+                _result.Reports.Add(message);
+                _result.ReportPoints.Add(point);
+            }
+
+            private void PlaceRefnets()
+            {
+                double scale = _settings.RefnetScale;
+                double inletLength = RefrigSettings.RefnetLength * scale;
+                double branchOffset = RefrigSettings.RefnetBranchOffset * scale;
+                int root = Resolve(_root);
+
+                // Breadth-first from the root: each node's parent edge is the upstream pipe.
+                Dictionary<int, int> parentEdge = new Dictionary<int, int>();
+                List<int> order = new List<int>();
+                Queue<int> queue = new Queue<int>();
+                parentEdge[root] = -1;
+                queue.Enqueue(root);
+                while (queue.Count > 0)
+                {
+                    int current = queue.Dequeue();
+                    order.Add(current);
+                    foreach (int id in _nodes[current].Edges)
+                    {
+                        int next = _edges[id].OtherNode(current);
+                        if (!parentEdge.ContainsKey(next))
+                        {
+                            parentEdge[next] = id;
+                            queue.Enqueue(next);
+                        }
+                    }
+                }
+
+                int networks = CountComponents();
+                if (networks > 1)
+                {
+                    Report(
+                        (networks - 1) + " other pipe network(s) are not connected to the root; no refnets "
+                        + "were placed on them.",
+                        _nodes[root].P);
+                }
+
+                foreach (int id in order)
+                {
+                    CNode node = _nodes[id];
+                    int degree = node.Edges.Count;
+                    if (degree < 3)
+                        continue;
+
+                    Vec2 n = node.P;
+                    if (degree >= 4)
+                    {
+                        Report("Degree-" + degree + " junction at " + At(n) + ": no refnet placed.", n);
+                        continue;
+                    }
+
+                    if (ExistingRefnetAt(n))
+                    {
+                        Report("A " + RefrigSettings.RefnetBlockName + " already exists at " + At(n)
+                            + ": left unchanged.", n);
+                        continue;
+                    }
+
+                    CEdge up = _edges[parentEdge[id]];
+                    List<CEdge> children = new List<CEdge>();
+                    foreach (int edgeId in node.Edges)
+                    {
+                        if (edgeId != up.Id)
+                            children.Add(_edges[edgeId]);
+                    }
+
+                    if (children.Count != 2)
+                        continue;
+
+                    Vec2 upstreamPoint = _nodes[up.OtherNode(id)].P;
+                    Vec2 d = n - upstreamPoint;
+                    double upstreamLength = d.Length;
+                    Vec2 direction = d.Normalized();
+
+                    Vec2 toFirst = (_nodes[children[0].OtherNode(id)].P - n).Normalized();
+                    Vec2 toSecond = (_nodes[children[1].OtherNode(id)].P - n).Normalized();
+                    double dotFirst = direction.Dot(toFirst);
+                    double dotSecond = direction.Dot(toSecond);
+                    CEdge through = dotFirst >= dotSecond ? children[0] : children[1];
+                    CEdge branch = dotFirst >= dotSecond ? children[1] : children[0];
+                    double throughDot = Math.Max(dotFirst, dotSecond);
+                    if (throughDot < Math.Cos(_angleTolerance))
+                    {
+                        Report("Bull-head tee at " + At(n)
+                            + ": neither branch continues the upstream pipe, so no refnet was placed.", n);
+                        continue;
+                    }
+
+                    if (upstreamLength < inletLength - 1e-6)
+                    {
+                        Report("The upstream straight run into " + At(n) + " is " + Num(upstreamLength)
+                            + " mm, shorter than the refnet's " + Num(inletLength)
+                            + " mm: no refnet placed.", n);
+                        continue;
+                    }
+
+                    Vec2 branchDirection = (_nodes[branch.OtherNode(id)].P - n).Normalized();
+                    double branchLength = EdgeLength(branch);
+                    if (branchLength < branchOffset - 1e-6)
+                    {
+                        Report("The branch leg at " + At(n) + " is " + Num(branchLength)
+                            + " mm, shorter than " + Num(branchOffset) + " mm: no refnet placed.", n);
+                        continue;
+                    }
+
+                    double side = direction.Cross(branchDirection);
+                    if (Math.Abs(direction.Dot(branchDirection)) > Math.Sin(_angleTolerance))
+                    {
+                        Report("The branch at " + At(n)
+                            + " does not leave the main at right angles, so no refnet was placed.", n);
+                        continue;
+                    }
+
+                    // The branch is on the left of the flow when side > 0; the block's own branch is on
+                    // the right, so a left branch mirrors it.
+                    bool mirrored = side > 0;
+                    Vec2 normal = direction.Left * (mirrored ? 1 : -1);
+                    Vec2 inlet = n - direction * inletLength;
+                    Vec2 branchPort = n + normal * branchOffset;
+
+                    int inletNode = AddNode(inlet);
+                    int branchNode = AddNode(branchPort);
+                    Reattach(up, id, inletNode);
+                    Reattach(branch, id, branchNode);
+
+                    _result.Refnets.Add(new RefnetPlacement
+                    {
+                        Node = n,
+                        Inlet = inlet,
+                        Direction = direction,
+                        Mirrored = mirrored,
+                        Scale = scale,
+                        Layer = up.Layer,
+                        Elevation = _input.Curves[up.Curve].Elevation,
+                        MainPort = n,
+                        BranchPort = branchPort
+                    });
+                }
+            }
+
+            private void Reattach(CEdge edge, int from, int to)
+            {
+                if (edge.A == from)
+                    edge.A = to;
+                else
+                    edge.B = to;
+                _nodes[from].Edges.Remove(edge.Id);
+                _nodes[to].Edges.Add(edge.Id);
+            }
+
+            private bool ExistingRefnetAt(Vec2 point)
+            {
+                foreach (Vec2 port in _input.ExistingRefnetPorts)
+                {
+                    if (port.DistanceTo(point) <= _settings.WeldTolerance)
+                        return true;
+                }
+
+                return false;
+            }
+
+            // ------------------------------------------------------------------ output paths
+
+            private void BuildPaths()
+            {
+                // A pipe the refnet cut down to nothing is dropped.
+                foreach (CEdge edge in _edges)
+                {
+                    if (!edge.Dead && EdgeLength(edge) <= ZeroLength)
+                        KillEdge(edge);
+                }
+
+                HashSet<int> done = new HashSet<int>();
+                foreach (CEdge start in _edges)
+                {
+                    if (start.Dead || done.Contains(start.Id))
+                        continue;
+
+                    List<int> forward = new List<int>();
+                    List<int> backward = new List<int>();
+                    done.Add(start.Id);
+
+                    int endNode = start.B;
+                    CEdge current = start;
+                    while (true)
+                    {
+                        CEdge next;
+                        if (!NextInPath(current, endNode, done, out next))
+                            break;
+                        forward.Add(next.Id);
+                        done.Add(next.Id);
+                        endNode = next.OtherNode(endNode);
+                        current = next;
+                    }
+
+                    int startNode = start.A;
+                    current = start;
+                    while (true)
+                    {
+                        CEdge next;
+                        if (!NextInPath(current, startNode, done, out next))
+                            break;
+                        backward.Add(next.Id);
+                        done.Add(next.Id);
+                        startNode = next.OtherNode(startNode);
+                        current = next;
+                    }
+
+                    RefrigPath path = new RefrigPath { Layer = start.Layer };
+                    path.Points.Add(_nodes[startNode].P);
+                    int walker = startNode;
+                    List<int> ordered = new List<int>();
+                    for (int i = backward.Count - 1; i >= 0; i--)
+                        ordered.Add(backward[i]);
+                    ordered.Add(start.Id);
+                    ordered.AddRange(forward);
+
+                    Dictionary<int, double> byCurve = new Dictionary<int, double>();
+                    foreach (int id in ordered)
+                    {
+                        CEdge edge = _edges[id];
+                        walker = edge.OtherNode(walker);
+                        path.Points.Add(_nodes[walker].P);
+                        double sum;
+                        byCurve.TryGetValue(edge.Curve, out sum);
+                        byCurve[edge.Curve] = sum + EdgeLength(edge);
+                    }
+
+                    int bestCurve = start.Curve;
+                    double bestLength = -1;
+                    foreach (KeyValuePair<int, double> pair in byCurve)
+                    {
+                        if (pair.Value > bestLength)
+                        {
+                            bestLength = pair.Value;
+                            bestCurve = pair.Key;
+                        }
+                    }
+
+                    path.SourceCurve = _input.Curves[bestCurve].Id;
+                    path.Elevation = _input.Curves[bestCurve].Elevation;
+                    _result.Paths.Add(path);
+                }
+            }
+
+            // The pipe that continues a path through a corner: the node has exactly two pipes, the other
+            // one is on the same layer and not yet in a path.
+            private bool NextInPath(CEdge current, int node, HashSet<int> done, out CEdge next)
+            {
+                next = null;
+                CNode n = _nodes[node];
+                if (n.Edges.Count != 2)
+                    return false;
+                CEdge other = _edges[n.Edges[0] == current.Id ? n.Edges[1] : n.Edges[0]];
+                if (other.Id == current.Id || done.Contains(other.Id)
+                    || !string.Equals(other.Layer, current.Layer, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                next = other;
+                return true;
+            }
+        }
+    }
+}

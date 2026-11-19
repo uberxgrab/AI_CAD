@@ -24,6 +24,8 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
   - `tests/test_pipeline.py`: `unittest` suite.
   - `tests/HvacQtoCoreTests/`: C# console tests for `HVACQTO` core logic. Keep this
     outside `cad_addin/`, whose SDK glob would compile it into the add-in.
+  - `tests/PipeCoreTests/`: C# console tests for the AutoCAD-free pipe core
+    (`HVACPIPESIZE` run finding and `HVACREFRIG` cleaning). Same rule: outside `cad_addin/`.
 - `CAD/`: representative CAD inputs. Explicitly named root fixtures such as
   `test.dxf` are also allowed.
   - `CAD/MEP_DWT_3.dwg`: the user's template drawing. It holds their duct blocks,
@@ -89,6 +91,8 @@ parser.load_dxf -> extract_entities      RawEntity
 | `HVACQTO` | `cad_addin/src/HvacQuantityTakeoff.cs`, `HvacQuantityTakeoffCore.cs`, `TakeoffSettingsForm.cs` | Exports the pickfirst set, or a new `GetSelection`, to a SpreadsheetML `.xml` workbook laid out like the VRV quotation template, with formulas and a contingency factor cell. |
 | `HVACCOUNT` | `cad_addin/src/TQO.cs` | Totals `Line` and `Polyline` lengths on layers that start with `!` and contain `x` (case-insensitive). |
 | `FIRSTMESSAGE` | `cad_addin/src/Message.cs` | Writes a hello message to the command line. |
+| `HVACPIPESIZE` | `cad_addin/src/HvacPipeSize.cs`, `PipeDrawingLibrary.cs`, `PipeSizeForm.cs` | Pick a LINE/LWPOLYLINE; finds the pipe run (corners pass, T nodes and layer changes stop it), highlights it, and moves it to the chosen type and size layer by cutting curves with `GetSplitCurves`. Needs in-AutoCAD acceptance testing. |
+| `HVACREFRIG` | `cad_addin/src/HvacRefrig.cs`, `RefrigWriter.cs`, `RefrigSettingsForm.cs` | Cleans a rough refrigerant LINE/LWPOLYLINE network (weld, orthogonalise, collapse jogs, merge collinear nodes; pipe ends never move), previews it, and inserts `Branch Connection (1)` refnets. Does not size pipes. Needs in-AutoCAD acceptance testing. |
 
 `HVACQTO` classification:
 
@@ -213,6 +217,9 @@ dotnet build cad_addin\HvacAiCadAddin.csproj --no-restore -p:Configuration=Debug
 
 # Run the HVACQTO core tests (build output goes to %TEMP%\HvacQtoCoreTests)
 dotnet run --project tests\HvacQtoCoreTests\HvacQtoCoreTests.csproj -c Debug
+
+# Run the pipe core tests (HVACPIPESIZE / HVACREFRIG; build output goes to %TEMP%\PipeCoreTests)
+dotnet run --project tests\PipeCoreTests\PipeCoreTests.csproj -c Debug
 ```
 
 `main.py` also accepts `--features` and `--feedback-template` for JSONL exports.
