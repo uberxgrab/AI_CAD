@@ -178,10 +178,15 @@ namespace HvacAiCadAddin.Commands
 
                 if (hit.Kind == DuctHitKind.EndFace || hit.Kind == DuctHitKind.StartFace)
                 {
-                    session.StartContinue(duct, hit.Kind == DuctHitKind.EndFace, out error);
-                    editor.WriteMessage("\nContinuing from the {0} of a {1} duct.",
-                        hit.Kind == DuctHitKind.EndFace ? "end" : "start", duct.Size.Label);
-                    return true;
+                    if (session.StartContinue(duct, hit.Kind == DuctHitKind.EndFace, out error))
+                    {
+                        editor.WriteMessage("\nContinuing from the {0} of a {1} duct.",
+                            hit.Kind == DuctHitKind.EndFace ? "end" : "start", duct.Size.Label);
+                        return true;
+                    }
+
+                    editor.WriteMessage("\n" + error);
+                    continue;
                 }
 
                 if (session.StartTap(duct, hit, out error))
