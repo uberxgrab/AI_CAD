@@ -455,7 +455,16 @@ corner with R = W/2. If it is still too short, refuse the point and say why.
    - Different widths: add an eccentric transition with its flat side on the
      aligned edge, and adjust B to meet it.
    - If B would end up shorter than 100, skip the join and say so.
-4. **Perpendicular ducts** are out of scope for this version; say so.
+4. **Branch tap (user request 2026-11-19).** If the reference is a side wall of
+   duct A and the picked edge is an end face of duct B at right angles to A
+   (within 1°), always join with a tap, without asking:
+   - B keeps its centreline and far end; its near end moves to the tap lead from
+     A's wall (rect L = max(Wb/2, 102), round 152 + 51).
+   - The tap (same shape as HVACDUCT's) goes on A's layer and elevation, tagged
+     `HVACAI_FITTING` kind `TAP`. A's flow is its drawing direction, so a rect
+     tap's 45° side faces A's start.
+   - Refuse with the reason if the tap does not fit on A, B does not run out from
+     that wall, or B would end up shorter than 100.
 
 ### `HVACPIPESIZE`: size a pipe run
 

@@ -12,7 +12,8 @@ namespace HvacAiCadAddin.Commands
     // and the duct moves perpendicular to the edge until the two are collinear. When the reference
     // belongs to a duct whose end faces the moved duct, the two can be joined. The maths and the edit
     // live in DuctAlignMath and DuctAligner (headless-tested); this class only prompts.
-    // Perpendicular ducts are out of scope in this version.
+    // A perpendicular branch (reference = main's side wall, edge = branch end face) is always
+    // joined with a tap, without asking.
     public class HvacDuctAlignCommand
     {
         [CommandMethod("HVACDUCTALIGN")]
@@ -48,7 +49,8 @@ namespace HvacAiCadAddin.Commands
 
             editor.WriteMessage(
                 "\nHVACDUCTALIGN: pick a reference edge, then the side edge of a duct to align to it.");
-            editor.WriteMessage("\nPerpendicular ducts are not supported in this version.");
+            editor.WriteMessage(
+                "\nFor a branch: pick a side wall of the main duct, then the end face of the branch; a tap is added.");
 
             while (true)
             {
@@ -167,8 +169,9 @@ namespace HvacAiCadAddin.Commands
                 return false;
             }
 
-            bool join = false;
-            if (plan.Join.Kind != JoinKind.None)
+            // A branch tap is always added, without asking.
+            bool join = plan.Join.Kind == JoinKind.Tap;
+            if (plan.Join.Kind == JoinKind.Direct || plan.Join.Kind == JoinKind.Eccentric)
             {
                 editor.WriteMessage("\nThe two ducts have facing ends: " + Describe(plan.Join));
                 PromptKeywordOptions joinOptions = new PromptKeywordOptions(

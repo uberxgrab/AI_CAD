@@ -458,6 +458,33 @@ namespace HvacAiCadAddin.Ducts
         {
             return branch.IsRound ? RoundTapLead(settings) : RectTapLead(branch.Width, settings);
         }
+
+        /// <summary>
+        /// Whether a tap whose branch centreline meets the main <paramref name="along"/> from the
+        /// main's start lies wholly on the main. A rectangular tap's 45 degree lead-in is upstream
+        /// (towards the main's start); a round tap's base is symmetric.
+        /// </summary>
+        public static bool TapFits(
+            double mainLength,
+            double along,
+            DuctSize branch,
+            FittingSettings settings,
+            out double upstream,
+            out double downstream)
+        {
+            if (branch.IsRound)
+            {
+                upstream = TapOpening(branch, settings) / 2;
+                downstream = upstream;
+            }
+            else
+            {
+                downstream = branch.Width / 2;
+                upstream = downstream + RectTapLead(branch.Width, settings);
+            }
+
+            return along - upstream >= -1e-6 && along + downstream <= mainLength + 1e-6;
+        }
     }
 
     /// <summary>Outline vertex lists for each fitting, in plan.</summary>
@@ -1204,7 +1231,9 @@ namespace HvacAiCadAddin.Ducts
     {
         None,
         Direct,
-        Eccentric
+        Eccentric,
+        /// <summary>B is a perpendicular branch joined to A's side wall with a tap.</summary>
+        Tap
     }
 
     /// <summary>What joining duct B to duct A would do.</summary>
@@ -1220,8 +1249,11 @@ namespace HvacAiCadAddin.Ducts
         /// <summary>The eccentric transition, when needed.</summary>
         public Outline Transition;
         public double TransitionLength;
-        /// <summary>+1 / -1: which side of A's axis the flat side is on.</summary>
+        /// <summary>+1 / -1: which side of A's axis the flat side (or, for a tap, the wall) is on.</summary>
         public int FlatSide;
+        /// <summary>The tap on A's wall, for <see cref="JoinKind.Tap"/>.</summary>
+        public Outline Tap;
+        public double TapLead;
     }
 
     public static class DuctAlignMath
@@ -1370,6 +1402,92 @@ namespace HvacAiCadAddin.Ducts
                     out endCentre);
             }
 
+            return plan;
+        }
+
+        /// <summary>
+        /// Plans a branch: duct B runs at right angles to duct A (within 1 degree) and the
+        /// reference edge is a side wall of A. B keeps its centreline and its far end; its end
+        /// nearer the wall moves to the tap lead from the wall, and a tap is drawn where B's
+        /// centreline meets the wall. A's flow is taken as its drawing direction (start to end),
+        /// as in HVACDUCT, so a rectangular tap's 45 degree side is towards A's start.
+        /// </summary>
+        public static JoinPlan PlanTap(
+            DuctGeometry a,
+            DuctGeometry b,
+            DuctSize branch,
+            Vec2 referencePoint,
+            FittingSettings settings)
+        {
+            const double positionTolerance = 0.5;
+            JoinPlan plan = new JoinPlan();
+
+            if (Math.Abs(a.Axis.Dot(b.Axis)) > Math.Sin(ParallelToleranceDegrees * Math.PI / 180.0))
+            {
+                plan.Reason = "the ducts are not at right angles";
+                return plan;
+            }
+
+            double halfA = a.Width / 2;
+            double referenceAcross = a.Across(referencePoint);
+            int side;
+            if (Math.Abs(referenceAcross - halfA) <= positionTolerance)
+                side = 1;
+            else if (Math.Abs(referenceAcross + halfA) <= positionTolerance)
+                side = -1;
+            else
+            {
+                plan.Reason = "the reference edge is not a side wall of duct A";
+                return plan;
+            }
+
+            Vec2 outward = a.Left * side;
+            double startOut = (b.Start - a.Start).Dot(outward);
+            double endOut = (b.End - a.Start).Dot(outward);
+            bool nearIsStart = startOut <= endOut;
+            double farOut = Math.Max(startOut, endOut);
+            // Outward distance per unit of B's length, running from its near end to its far end.
+            double rate = Math.Abs(b.Axis.Dot(outward));
+            if (farOut <= halfA + positionTolerance)
+            {
+                plan.Reason = "duct B does not run out from that wall of duct A";
+                return plan;
+            }
+
+            Vec2 nearPoint = nearIsStart ? b.Start : b.End;
+            Vec2 toFar = nearIsStart ? b.Axis : -b.Axis;
+            double nearOut = Math.Min(startOut, endOut);
+            Vec2 wallPoint = nearPoint + toFar * ((halfA - nearOut) / rate);
+            double along = a.Along(wallPoint);
+
+            double upstream;
+            double downstream;
+            if (!DuctFittings.TapFits(a.Length, along, branch, settings, out upstream, out downstream))
+            {
+                plan.Reason = "the tap needs "
+                    + upstream.ToString("0.#", CultureInfo.InvariantCulture)
+                    + " mm of duct A before the branch centreline and "
+                    + downstream.ToString("0.#", CultureInfo.InvariantCulture)
+                    + " mm after it, and duct A is too short there";
+                return plan;
+            }
+
+            double lead = DuctFittings.TapLead(branch, settings);
+            double newLength = (farOut - halfA - lead) / rate;
+            if (newLength < MinimumJoinedLength)
+            {
+                plan.Reason = "duct B would end up shorter than "
+                    + MinimumJoinedLength.ToString("0", CultureInfo.InvariantCulture) + " mm";
+                return plan;
+            }
+
+            plan.Kind = JoinKind.Tap;
+            plan.PositionMoves = nearIsStart;
+            plan.NewStart = nearIsStart ? wallPoint + toFar * (lead / rate) : b.Start;
+            plan.NewLength = newLength;
+            plan.FlatSide = side;
+            plan.TapLead = lead;
+            plan.Tap = FittingShapes.Tap(wallPoint, a.Axis, outward, branch, settings);
             return plan;
         }
     }

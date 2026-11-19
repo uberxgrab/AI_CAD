@@ -178,21 +178,10 @@ namespace HvacAiCadAddin.Ducts
         private bool CheckTapFits(DuctInfo main, DuctHit hit, DuctSize branch, out string error)
         {
             error = null;
-            double half = DuctFittings.TapOpening(branch, _settings) / 2;
             double upstream;
             double downstream;
-            if (branch.IsRound)
-            {
-                upstream = half;
-                downstream = half;
-            }
-            else
-            {
-                downstream = branch.Width / 2;
-                upstream = downstream + DuctFittings.RectTapLead(branch.Width, _settings);
-            }
-
-            if (hit.Along - upstream < -1e-6 || hit.Along + downstream > main.Geometry.Length + 1e-6)
+            if (!DuctFittings.TapFits(
+                main.Geometry.Length, hit.Along, branch, _settings, out upstream, out downstream))
             {
                 error = "The tap needs " + Num(upstream) + " mm of the main upstream of the point and "
                     + Num(downstream) + " mm downstream; the main is too short there.";

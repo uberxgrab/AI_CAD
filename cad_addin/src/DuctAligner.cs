@@ -141,9 +141,18 @@ namespace HvacAiCadAddin.Ducts
 
             if (!DuctAlignMath.IsParallel(edgeDirection, b.Geometry.Axis, DuctAlignMath.ParallelToleranceDegrees))
             {
-                plan.Error = "That edge is an end face of the duct, so aligning it would slide the duct "
-                    + "along its own axis. Perpendicular ducts are not supported in this version; "
-                    + "pick a side edge of the duct.";
+                // An end face of B against a side wall of A: B is a branch, joined with a tap.
+                if (a != null && a.Id != b.Id)
+                {
+                    plan.Join = DuctAlignMath.PlanTap(a.Geometry, b.Geometry, b.Size, referenceFrom, settings);
+                    if (plan.Join.Kind == JoinKind.Tap)
+                        return plan;
+                    plan.Error = "No tap can be added: " + plan.Join.Reason + ".";
+                    return plan;
+                }
+
+                plan.Error = "That edge is an end face of the duct. To add a branch tap, pick a side wall "
+                    + "of the main duct as the reference; otherwise pick a side edge of the duct.";
                 return plan;
             }
 
@@ -163,8 +172,8 @@ namespace HvacAiCadAddin.Ducts
 
             if (!DuctAlignMath.IsParallel(a.Geometry.Axis, b.Geometry.Axis, DuctAlignMath.ParallelToleranceDegrees))
             {
-                plan.Note = "No join is offered: the ducts are not parallel (perpendicular ducts are out of "
-                    + "scope in this version).";
+                plan.Note = "No join is offered: the ducts are not parallel. For a branch tap, pick a side "
+                    + "wall of the main duct, then the end face of the branch.";
                 return plan;
             }
 
@@ -190,10 +199,14 @@ namespace HvacAiCadAddin.Ducts
                     Point3d position = block.Position
                         + new Vector3d(plan.Translation.X, plan.Translation.Y, 0);
                     double distance = plan.B.Distance3;
-                    string text = "Aligned: duct moved "
-                        + plan.Translation.Length.ToString("0.##", CultureInfo.InvariantCulture) + " mm";
+                    bool tap = plan.Join.Kind == JoinKind.Tap;
+                    string text = tap
+                        ? "Branch joined to the side wall of the " + plan.A.Size.Label + " duct"
+                        : "Aligned: duct moved "
+                            + plan.Translation.Length.ToString("0.##", CultureInfo.InvariantCulture) + " mm";
 
-                    bool joined = join && plan.Join.Kind != JoinKind.None;
+                    // A tap has no alternative: the branch is always joined.
+                    bool joined = (join || tap) && plan.Join.Kind != JoinKind.None;
                     if (joined)
                     {
                         if (plan.Join.PositionMoves)
@@ -202,7 +215,7 @@ namespace HvacAiCadAddin.Ducts
                         }
 
                         distance = plan.Join.NewLength;
-                        text += "; joined, new length "
+                        text += (tap ? "; new length " : "; joined, new length ")
                             + plan.Join.NewLength.ToString("0.##", CultureInfo.InvariantCulture) + " mm";
                     }
 
@@ -228,6 +241,23 @@ namespace HvacAiCadAddin.Ducts
                         text += "; eccentric transition "
                             + plan.Join.TransitionLength.ToString("0.#", CultureInfo.InvariantCulture)
                             + " mm long added";
+                    }
+
+                    if (joined && tap)
+                    {
+                        BlockTableRecord space = (BlockTableRecord)transaction.GetObject(
+                            block.OwnerId, OpenMode.ForWrite);
+                        DuctBlockLibrary.AddFitting(
+                            db,
+                            transaction,
+                            space,
+                            plan.Join.Tap,
+                            plan.A.Elevation,
+                            plan.A.Layer,
+                            RouteFitting.TapKind,
+                            plan.B.Size.Label);
+                        text += "; tap added ("
+                            + plan.Join.TapLead.ToString("0.#", CultureInfo.InvariantCulture) + " mm lead)";
                     }
 
                     transaction.Commit();

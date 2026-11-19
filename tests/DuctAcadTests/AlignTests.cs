@@ -124,12 +124,24 @@ namespace DuctAcadTests
             AssertMatchesDrawing("narrow B", db, narrow);
             FindTransition(db, 302000, 302346.4, 100300);
 
+            // --- A perpendicular branch: reference = A's left wall (y = 100300), edge = B's start face.
+            // Lead = max(600/2, 102) = 300, so B starts at y = 100600 and keeps its far end (103500).
+            ObjectId branch = Insert(db, W600, 301000, 101500, 90, false, 2000);
+            plan = PlanFor(db, a, 300500, 100300, branch, 301000, 101500);
+            TestLog.True("branch plan", plan.Error == null && plan.Join.Kind == JoinKind.Tap, plan.Error ?? plan.Join.Reason);
+            TestLog.True("apply branch without a join answer", DuctAligner.Apply(db, plan, false, out message), message);
+            TestLog.True("message mentions the tap", message.Contains("tap added"), message);
+            joined = Read(db, branch);
+            TestLog.Near("branch start x", 301000, joined.Geometry.Start.X, 1e-6);
+            TestLog.Near("branch start y", 100600, joined.Geometry.Start.Y, 1e-6);
+            TestLog.Near("branch length", 2900, joined.Geometry.Length, 1e-6);
+            AssertMatchesDrawing("branch", db, branch);
+
             // --- Refusals
-            // A duct at right angles to A: its end face is parallel to the reference edge.
+            // A duct at right angles beyond A's end: no room for a tap on A.
             ObjectId endFaceB = Insert(db, W600, 303500, 99000, 90, false, 2000);
             plan = PlanFor(db, a, 300500, 100300, endFaceB, 303500, 99000);
-            TestLog.True("an end face is refused", plan.Error != null && plan.Error.Contains("end face"), plan.Error);
-            TestLog.True("and perpendicular ducts are named as out of scope", plan.Error != null && plan.Error.Contains("Perpendicular"), plan.Error);
+            TestLog.True("a tap off the end of A is refused", plan.Error != null && plan.Error.Contains("No tap"), plan.Error);
 
             ObjectId slanted = Insert(db, W600, 303500, 100040, 5, false, 2000);
             plan = PlanFor(db, a, 300500, 100300, slanted, 304000, 100390);
