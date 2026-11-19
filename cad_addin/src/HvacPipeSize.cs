@@ -45,8 +45,8 @@ namespace HvacAiCadAddin.Commands
                 while (true)
                 {
                     PromptEntityOptions options = new PromptEntityOptions(
-                        "\nPick a pipe (LINE or polyline) to size or [Weld tolerance] <" + Number(settings.WeldTolerance)
-                        + " mm>, Enter to finish: ");
+                        "\nPick a pipe (LINE or polyline) to size, or [Weld] to set the weld tolerance (now "
+                        + Number(settings.WeldTolerance) + " mm); Enter to finish: ");
                     options.SetRejectMessage("\nPick a LINE or a polyline.");
                     options.AddAllowedClass(typeof(Line), true);
                     options.AddAllowedClass(typeof(Autodesk.AutoCAD.DatabaseServices.Polyline), true);
