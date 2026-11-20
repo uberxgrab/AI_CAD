@@ -1233,3 +1233,110 @@ units. It needs in-AutoCAD acceptance testing.
 4. Draw one branch only 200 long, or two branches 200 apart: they keep a plain drop and are circled.
 5. Try a rotated UCS and a base angle other than 0, a trunk end 500 past the last branch (trimmed)
    and 3000 past it (a unit), a branch with its own T (a sub-trunk), and Esc at each prompt.
+
+## HVACCTRLWIRE: draw control wires from a template route
+
+The user approved this spec on 2026-11-20. Units are drawing millimetres. The command wires the
+thermostat's control cable to many indoor units from one sample route the user has already drawn.
+It needs in-AutoCAD acceptance testing.
+
+1. **Input,** in this order:
+   - Select the indoor-unit block references (pickfirst or a new selection filtered to `INSERT`).
+   - Pick the **template**: one LINE or LWPOLYLINE that already runs from the thermostat to one
+     indoor unit. That unit should be one of the selected blocks, or at least a block that touches
+     the template's unit end (within 500 mm of its extents).
+   - Confirm the **thermostat point**. The prompt is `Pick the thermostat point or [Other end]
+     <circled end>:`. The default is the template end farther from the template's unit (the end
+     that touches no selected block); it is circled in red. `Other` switches ends, a picked point
+     chooses the template end nearest to it, and Enter accepts the circled end.
+   - A dialog (`ControlWireSettingsForm`).
+2. **Settings,** remembered in `%APPDATA%\HvacAiCadAddin\HVACCTRLWIRE.settings`:
+
+   | Setting | Default |
+   | --- | --- |
+   | Offset spacing d | 150 (must be above 0) |
+   | Layer | `EIA_5 CONTROL WIRE` (fixed; imported from the template when missing; ACI 11, linetype `Broken Line`) |
+   | Write cable text | on |
+   | Text | `2x0.75 MM2` |
+   | Text height | 275 |
+
+3. **Terminal point of each unit.** The template route runs from the thermostat point T0 to the
+   template unit's terminal point (its far end).
+   - A unit of the **same block** (the same effective name; a dynamic block by its real
+     definition name) gets the same block-local point: the template end goes through the inverse
+     of the template unit's `BlockTransform` and then through the other unit's `BlockTransform`
+     (`ControlWireAffine.TryMapTerminal`, which also handles rotated and mirrored inserts).
+   - A **different block** gets its insertion point, and the command line says so.
+   - The template's own unit is served by the template and gets no new wire. The `k = 0` option the
+     spec mentioned for it is not built.
+4. **Layout** (`ControlWirePlanner`, AutoCAD-free). Each other unit gets its own open LWPOLYLINE:
+   - It runs parallel to the template at k x d, on the side of the route its terminal lies on
+     (left or right, looking from the thermostat), with mitre joins at corners.
+   - **Separate starts.** The wires do not share a start point. At the thermostat end each wire
+     starts at its own offset position: T0 shifted by k x d along the first segment's normal. There
+     is no fan-out.
+   - **Exit.** At the point of the route nearest the unit's terminal (the foot of the
+     perpendicular, or the route's end or start when the terminal lies beyond it, or the corner
+     vertex nearest it) the wire leaves the parallel run, perpendicular to the route segment it
+     leaves from, out to the terminal's lateral distance, then along the segment to the terminal
+     when it is not straight out (two orthogonal legs). Only this last part leaves the parallel run.
+   - **Order.** On each side the wire that leaves the route first (nearest the thermostat along
+     it) is the outermost (largest k), and the last to leave is k = 1. A wire that leaves earlier
+     must be outside the wires that run on, or its exit leg would cut across them. If an unusual
+     layout still crosses (for instance a terminal nearer to the route than its offset), every
+     order of up to six wires on a side is tried and the one with fewest crossings is kept.
+   - A terminal exactly on the route goes to the side with fewer wires.
+   - **Arcs.** Straight segments only. A template with a bulge, or a closed one, is refused
+     (`arcs are not supported`) and nothing is drawn.
+5. **Warnings** (yellow circles in the preview and lines on the command line):
+   - a terminal more than 3000 mm beyond the end of the route (the wire runs the whole route);
+   - a terminal nearer to the route than its wire's offset (the connection turns back);
+   - two wires that cross or overlap (for example two units exiting at the same point);
+   - a wire that crosses the template route;
+   - an offset that breaks down at a corner (a sharp corner or a short segment).
+6. **Preview and confirm.** Transient graphics: the new wires in green, the template in cyan, the
+   thermostat in a red circle, `W1`, `W2`, ... with the unit each wire serves, and the warnings.
+   `W1` is the first wire to leave the route. Yes/No, default Yes. Cancel writes nothing.
+7. **Write,** in one transaction (one undo group; the template is never modified):
+   - One LWPOLYLINE per wire on `EIA_5 CONTROL WIRE`, colour, linetype and lineweight ByLayer,
+     the template's elevation. The layer (with its linetype) is imported from the template when the
+     drawing lacks it.
+   - **Cable text** when on: one TEXT per wire, middle-centre justified, on the wire layer, style
+     `T_unicode` if the drawing has it (otherwise the current style), rotated along the longest
+     leg of the connection and kept readable (rotation in (-90, 90] degrees), one text height off
+     that leg.
+   - Every new wire and text carries `HVACAI_CTRLWIRE` xdata (`WIRE`, label, unit handle; or
+     `TEXT`, label). A rerun does not replace earlier wires: it counts the tagged wires already in
+     the drawing and says so.
+
+**Choices the code made** (for review):
+
+- **Thermostat pick.** A picked point selects the nearest template end rather than moving T0 to
+  the picked point, so the wires start at offsets of the template's own end.
+- **Touching** a template end means within 500 mm of the block's extents (`GeometricExtents`, or the
+  insertion point when the extents cannot be measured).
+- **Same block** means the same effective block name. A dynamic block stretched to a different
+  `Distance3` keeps the same local terminal, which may not be where its geometry now ends.
+- **Exit at a corner.** A terminal nearest a corner vertex leaves from the first segment of that
+  corner, so its two legs are drawn in that segment's frame.
+- Files: `ControlWireCore.cs` (AutoCAD-free: settings, `ControlWireAffine`, `ControlWirePlanner`;
+  tested by `tests/PipeCoreTests/ControlWireTests.cs`), `ControlWireWriter.cs` (block reading and
+  the write transaction), `ControlWireSettingsForm.cs`, `HvacCtrlWire.cs` (command). It reuses
+  `PipeTransients`, `PipeDrawingLibrary` (`ReadCurves`, `EnsureNamedLayer`, `FindTextStyle`),
+  `PipeTemplateHolder` and `RefrigSizeWriter.EnsureRegApp` unchanged.
+
+**Manual tests in AutoCAD** (after `NETLOAD` of the rebuilt x64 DLL):
+
+1. Place a thermostat and four to six copies of one indoor-unit block on both sides of a straight
+   corridor, and draw a LWPOLYLINE from the thermostat to one unit's terminal point. Run
+   `HVACCTRLWIRE`, select the units (the template's unit included), pick the template, press Enter at
+   the thermostat prompt (check the circle is on the thermostat end), and accept the dialog.
+2. Check the preview: each wire starts at its own offset from the thermostat end (150 mm apart),
+   runs parallel, leaves at the point nearest its unit and ends on the same point of its block as
+   the template does on its own. W1 is the first to leave; no two wires cross.
+3. Answer Yes. Check the layer and `Broken Line` linetype, the `2x0.75 MM2` texts beside the exit
+   legs, the template unchanged, and that one `UNDO` removes everything. Run again: the command
+   line reports the earlier wires.
+4. Try a template with a corner (L shape), a rotated and a mirrored unit, a different block among
+   the units (it should use its insertion point), a unit beyond the end of the route, the `Other`
+   keyword at the thermostat prompt, a template with an arc (refused), and Esc at each prompt.
