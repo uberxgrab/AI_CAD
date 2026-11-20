@@ -131,6 +131,24 @@ namespace HvacAiCadAddin.Pipes
         public double JogTolerance = 200;
         public double RefnetScale = 1.24;
 
+        /// <summary>
+        /// R1: the least pipe length from an upstream refnet's outlet (main or branch) to the inlet of the
+        /// next refnet (mm).
+        /// </summary>
+        public double RefnetSpacing = 1000;
+
+        /// <summary>
+        /// R2: the least straight pipe from a refnet outlet to the next bend or refnet inlet (mm). It is
+        /// also the smallest set-back of a refnet from its T node.
+        /// </summary>
+        public double OutletStraight = 500;
+
+        /// <summary>R3: the greatest pipe length from the first refnet's inlet to the farthest indoor unit (mm).</summary>
+        public double MaxUnitRun = 40000;
+
+        /// <summary>R3: warn when the run is longer than <see cref="MaxUnitRun"/> less this construction allowance (mm).</summary>
+        public double RunAllowance = 3000;
+
         /// <summary>True: the base angle is the UCS X axis. False: <see cref="BaseAngleDegrees"/>, from world X.</summary>
         public bool UseUcsBaseAngle = true;
         public double BaseAngleDegrees = 0;
@@ -151,6 +169,14 @@ namespace HvacAiCadAddin.Pipes
                 error = "The refnet scale must be above 0 and at most 100.";
             else if (!Finite(BaseAngleDegrees))
                 error = "The base angle must be a number.";
+            else if (!Finite(RefnetSpacing) || RefnetSpacing < 0 || RefnetSpacing > 100000)
+                error = "The refnet spacing (R1) must be 0 or more.";
+            else if (!Finite(OutletStraight) || OutletStraight < 0 || OutletStraight > 100000)
+                error = "The straight pipe after an outlet (R2) must be 0 or more.";
+            else if (!Finite(MaxUnitRun) || MaxUnitRun <= 0 || MaxUnitRun > 1000000)
+                error = "The longest run to an indoor unit (R3) must be above 0.";
+            else if (!Finite(RunAllowance) || RunAllowance < 0 || RunAllowance >= MaxUnitRun)
+                error = "The R3 allowance must be 0 or more and less than the longest run.";
             return error == null;
         }
 
@@ -169,6 +195,10 @@ namespace HvacAiCadAddin.Pipes
             PipeSizeSettings.Add(text, "scale", PipeSizeSettings.Num(RefnetScale));
             PipeSizeSettings.Add(text, "ucs", UseUcsBaseAngle ? "1" : "0");
             PipeSizeSettings.Add(text, "baseAngle", PipeSizeSettings.Num(BaseAngleDegrees));
+            PipeSizeSettings.Add(text, "spacing", PipeSizeSettings.Num(RefnetSpacing));
+            PipeSizeSettings.Add(text, "straight", PipeSizeSettings.Num(OutletStraight));
+            PipeSizeSettings.Add(text, "maxrun", PipeSizeSettings.Num(MaxUnitRun));
+            PipeSizeSettings.Add(text, "allowance", PipeSizeSettings.Num(RunAllowance));
             return text.ToString();
         }
 
@@ -196,6 +226,10 @@ namespace HvacAiCadAddin.Pipes
                     case "scale": if (isNumber) settings.RefnetScale = number; break;
                     case "ucs": settings.UseUcsBaseAngle = value != "0"; break;
                     case "baseAngle": if (isNumber) settings.BaseAngleDegrees = number; break;
+                    case "spacing": if (isNumber) settings.RefnetSpacing = number; break;
+                    case "straight": if (isNumber) settings.OutletStraight = number; break;
+                    case "maxrun": if (isNumber) settings.MaxUnitRun = number; break;
+                    case "allowance": if (isNumber) settings.RunAllowance = number; break;
                 }
             }
 

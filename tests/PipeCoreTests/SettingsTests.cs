@@ -82,6 +82,10 @@ namespace PipeCoreTests
                 Check.Near("align", 200, s.AlignTolerance);
                 Check.Near("jog", 200, s.JogTolerance);
                 Check.Near("scale", 1.24, s.RefnetScale);
+                Check.Near("R1 refnet spacing", 1000, s.RefnetSpacing);
+                Check.Near("R2 straight pipe after an outlet", 500, s.OutletStraight);
+                Check.Near("R3 longest run to an indoor unit", 40000, s.MaxUnitRun);
+                Check.Near("R3 construction allowance", 3000, s.RunAllowance);
                 Check.True("UCS X", s.UseUcsBaseAngle);
                 string error;
                 Check.True("valid", s.IsValid(out error));
@@ -103,7 +107,11 @@ namespace PipeCoreTests
                     JogTolerance = 120.25,
                     RefnetScale = 1.35,
                     UseUcsBaseAngle = false,
-                    BaseAngleDegrees = 12.5
+                    BaseAngleDegrees = 12.5,
+                    RefnetSpacing = 1250.5,
+                    OutletStraight = 600,
+                    MaxUnitRun = 45000,
+                    RunAllowance = 2500
                 };
                 RefrigSettings back = RefrigSettings.Deserialize(s.Serialize());
                 Check.Near("weld", 35.5, back.WeldTolerance);
@@ -113,7 +121,17 @@ namespace PipeCoreTests
                 Check.Near("scale", 1.35, back.RefnetScale);
                 Check.False("custom base angle", back.UseUcsBaseAngle);
                 Check.Near("base angle", 12.5, back.BaseAngleDegrees);
+                Check.Near("R1", 1250.5, back.RefnetSpacing);
+                Check.Near("R2", 600, back.OutletStraight);
+                Check.Near("R3 limit", 45000, back.MaxUnitRun);
+                Check.Near("R3 allowance", 2500, back.RunAllowance);
                 Check.Contains("scale is written with a point", s.Serialize(), "scale=1.35");
+                Check.Contains("R1 is written with a point", s.Serialize(), "spacing=1250.5");
+
+                RefrigSettings old = RefrigSettings.Deserialize("weld=40\nscale=1.3\n");
+                Check.Near("a file from before the rules keeps the R1 default", 1000, old.RefnetSpacing);
+                Check.Near("a file from before the rules keeps the R3 default", 40000, old.MaxUnitRun);
+                Check.Near("and its own values", 40, old.WeldTolerance);
             });
         }
 
@@ -156,6 +174,12 @@ namespace PipeCoreTests
             Invalid("zero scale", s => s.RefnetScale = 0, "refnet scale");
             Invalid("NaN scale", s => s.RefnetScale = double.NaN, "refnet scale");
             Invalid("NaN base angle", s => s.BaseAngleDegrees = double.NaN, "base angle");
+            Invalid("negative R1", s => s.RefnetSpacing = -1, "refnet spacing");
+            Invalid("negative R2", s => s.OutletStraight = -1, "straight pipe");
+            Invalid("zero R3 limit", s => s.MaxUnitRun = 0, "longest run");
+            Invalid("NaN R3 limit", s => s.MaxUnitRun = double.NaN, "longest run");
+            Invalid("allowance as big as the limit", s => s.RunAllowance = 40000, "allowance");
+            Invalid("negative allowance", s => s.RunAllowance = -5, "allowance");
 
             Check.Case("edge values are valid", () =>
             {

@@ -57,8 +57,8 @@ namespace HvacAiCadAddin.Commands
     }
 
     /// <summary>
-    /// HVACREFRIG dialog: the cleaning tolerances, the refnet scale and the base angle. The last accepted
-    /// values are remembered between runs.
+    /// HVACREFRIG dialog: the cleaning tolerances, the refnet scale, the refnet piping rules (R1, R2, R3)
+    /// and the base angle. The last accepted values are remembered between runs.
     /// </summary>
     public sealed class RefrigSettingsForm : Form
     {
@@ -67,6 +67,10 @@ namespace HvacAiCadAddin.Commands
         private readonly TextBox alignBox = new TextBox { Width = 90 };
         private readonly TextBox jogBox = new TextBox { Width = 90 };
         private readonly TextBox scaleBox = new TextBox { Width = 90 };
+        private readonly TextBox spacingBox = new TextBox { Width = 90 };
+        private readonly TextBox straightBox = new TextBox { Width = 90 };
+        private readonly TextBox maxRunBox = new TextBox { Width = 90 };
+        private readonly TextBox allowanceBox = new TextBox { Width = 90 };
         private readonly RadioButton ucsRadio = new RadioButton { Text = "UCS X axis", AutoSize = true };
         private readonly RadioButton customRadio = new RadioButton { Text = "Angle (degrees from world X)", AutoSize = true };
         private readonly TextBox baseAngleBox = new TextBox { Width = 90 };
@@ -81,7 +85,7 @@ namespace HvacAiCadAddin.Commands
             Text = "HVACREFRIG: clean up a refrigerant network";
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(500, 380);
+            ClientSize = new Size(500, 500);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -95,7 +99,7 @@ namespace HvacAiCadAddin.Commands
                 Padding = new Padding(10),
                 AutoScroll = true
             };
-            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 320));
             main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             AddRow(main, "Weld tolerance (mm)", weldBox);
@@ -103,6 +107,20 @@ namespace HvacAiCadAddin.Commands
             AddRow(main, "Align tolerance (mm)", alignBox);
             AddRow(main, "Jog tolerance (mm)", jogBox);
             AddRow(main, "Refnet scale", scaleBox);
+
+            Label rules = new Label
+            {
+                Text = "Refnet piping rules",
+                AutoSize = true,
+                Font = new Font(Font, FontStyle.Bold),
+                Margin = new Padding(3, 14, 3, 4)
+            };
+            main.Controls.Add(rules);
+            main.SetColumnSpan(rules, 2);
+            AddRow(main, "R1: refnet outlet to next refnet inlet, min (mm)", spacingBox);
+            AddRow(main, "R2: straight pipe after an outlet, min (mm)", straightBox);
+            AddRow(main, "R3: first refnet inlet to farthest unit, max (mm)", maxRunBox);
+            AddRow(main, "R3: construction allowance, warn within (mm)", allowanceBox);
 
             Label header = new Label
             {
@@ -150,6 +168,10 @@ namespace HvacAiCadAddin.Commands
             alignBox.Text = Format(last.AlignTolerance);
             jogBox.Text = Format(last.JogTolerance);
             scaleBox.Text = Format(last.RefnetScale);
+            spacingBox.Text = Format(last.RefnetSpacing);
+            straightBox.Text = Format(last.OutletStraight);
+            maxRunBox.Text = Format(last.MaxUnitRun);
+            allowanceBox.Text = Format(last.RunAllowance);
             baseAngleBox.Text = Format(last.BaseAngleDegrees);
             ucsRadio.Checked = last.UseUcsBaseAngle;
             customRadio.Checked = !last.UseUcsBaseAngle;
@@ -187,7 +209,11 @@ namespace HvacAiCadAddin.Commands
                 || !TryNumber(angleBox.Text, out settings.AngleToleranceDegrees)
                 || !TryNumber(alignBox.Text, out settings.AlignTolerance)
                 || !TryNumber(jogBox.Text, out settings.JogTolerance)
-                || !TryNumber(scaleBox.Text, out settings.RefnetScale))
+                || !TryNumber(scaleBox.Text, out settings.RefnetScale)
+                || !TryNumber(spacingBox.Text, out settings.RefnetSpacing)
+                || !TryNumber(straightBox.Text, out settings.OutletStraight)
+                || !TryNumber(maxRunBox.Text, out settings.MaxUnitRun)
+                || !TryNumber(allowanceBox.Text, out settings.RunAllowance))
             {
                 errorLabel.Text = "Every value must be a number.";
                 return;
