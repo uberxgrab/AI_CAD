@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
@@ -9,6 +10,18 @@ using Autodesk.AutoCAD.Runtime;
 
 namespace HvacAiCadAddin.Commands
 {
+    // HVACSTRETCH: native STRETCH for ordinary entities plus a dynamic-block
+    // distance change when exactly one end of a block is crossed.
+    //
+    // Objects are selected with AutoCAD's own selection prompt (GetSelection),
+    // so crossing/window by dragging, polygons, several selections, single
+    // picks and Shift-removal behave as in STRETCH. The areas the user made,
+    // the objects they removed and the objects they picked are read back and
+    // replayed into native STRETCH, which then owns the second-point prompt.
+    // Each dynamic block is judged against the area that selected it; a picked
+    // block counts as fully crossed (moved whole). The behaviour before this
+    // selection change (one Crossing rectangle) is tagged
+    // hvacstretch-before-selection.
     public class HvacStretchCommand
     {
         private const double PointTolerance = 1e-8;
@@ -32,35 +45,28 @@ namespace HvacAiCadAddin.Commands
             Database database = document.Database;
             Editor editor = document.Editor;
 
-            // Capture the Crossing rectangle once. The same two points are
-            // subsequently passed to AutoCAD's native STRETCH command.
-            PromptPointResult firstCornerResult = editor.GetPoint(
-                "\nSpecify first corner of Crossing selection: ");
-            if (firstCornerResult.Status != PromptStatus.OK)
+            // Select once, as native STRETCH does. The selection areas, removals
+            // and picks are replayed into native STRETCH afterwards.
+            PromptSelectionOptions selectionOptions = new PromptSelectionOptions();
+            selectionOptions.MessageForAdding =
+                "\nSelect objects to stretch by crossing-window or crossing-polygon...";
+            PromptSelectionResult selectionResult = editor.GetSelection(
+                selectionOptions);
+            if (selectionResult.Status == PromptStatus.Cancel)
                 return;
-
-            PromptCornerOptions oppositeCornerOptions = new PromptCornerOptions(
-                "\nSpecify opposite corner: ",
-                firstCornerResult.Value);
-            PromptPointResult oppositeCornerResult = editor.GetCorner(
-                oppositeCornerOptions);
-            if (oppositeCornerResult.Status != PromptStatus.OK)
-                return;
-
-            Point3d firstCorner = firstCornerResult.Value;
-            Point3d oppositeCorner = oppositeCornerResult.Value;
-
-            PromptSelectionResult selectionResult = editor.SelectCrossingWindow(
-                firstCorner,
-                oppositeCorner);
-            if (selectionResult.Status != PromptStatus.OK)
+            if (selectionResult.Status != PromptStatus.OK ||
+                selectionResult.Value.Count == 0)
             {
-                editor.WriteMessage("\nNo objects were found in the Crossing selection.");
+                editor.WriteMessage("\nNo objects were selected.");
                 return;
             }
 
+            StretchSelection selection = StretchSelection.Read(
+                editor,
+                selectionResult.Value);
+
             List<DynamicBlockCandidate> dynamicBlocks =
-                CaptureDynamicBlockCandidates(database, selectionResult.Value);
+                CaptureDynamicBlockCandidates(database, selection);
 
             PromptPointResult basePointResult = editor.GetPoint(
                 "\nSpecify base point: ");
@@ -72,8 +78,7 @@ namespace HvacAiCadAddin.Commands
                 database,
                 editor,
                 dynamicBlocks,
-                firstCorner,
-                oppositeCorner,
+                selection,
                 basePointResult.Value);
 
             ActiveStretchSessions.Add(document, session);
@@ -91,7 +96,7 @@ namespace HvacAiCadAddin.Commands
 
         private static List<DynamicBlockCandidate> CaptureDynamicBlockCandidates(
             Database database,
-            SelectionSet selectionSet)
+            StretchSelection selection)
         {
             List<DynamicBlockCandidate> candidates =
                 new List<DynamicBlockCandidate>();
@@ -99,7 +104,7 @@ namespace HvacAiCadAddin.Commands
             using (Transaction transaction =
                 database.TransactionManager.StartTransaction())
             {
-                foreach (ObjectId objectId in selectionSet.GetObjectIds())
+                foreach (ObjectId objectId in selection.ObjectIds)
                 {
                     BlockReference block = transaction.GetObject(
                         objectId,
@@ -108,7 +113,10 @@ namespace HvacAiCadAddin.Commands
                     DynamicBlockCandidate candidate;
                     if (block != null &&
                         block.IsDynamicBlock &&
-                        TryCreateCandidate(block, out candidate))
+                        TryCreateCandidate(
+                            block,
+                            selection.GetArea(objectId),
+                            out candidate))
                     {
                         candidates.Add(candidate);
                     }
@@ -123,6 +131,7 @@ namespace HvacAiCadAddin.Commands
         // X/Y-oriented block definitions and rotated block references.
         private static bool TryCreateCandidate(
             BlockReference block,
+            SelectionArea area,
             out DynamicBlockCandidate candidate)
         {
             candidate = null;
@@ -160,7 +169,8 @@ namespace HvacAiCadAddin.Commands
                 originalPropertyValue,
                 block.Position,
                 xAxis,
-                yAxis);
+                yAxis,
+                area);
             return true;
         }
 
@@ -195,14 +205,15 @@ namespace HvacAiCadAddin.Commands
         // owns the second-point prompt and therefore supplies its normal
         // rubber-band preview for all ordinary entities. The preview object
         // below updates dynamic blocks from that same live cursor position.
+        // The user's selection (areas, removals, picks) is replayed into
+        // STRETCH's own "Select objects:" prompt first.
         private sealed class NativeStretchSession : IDisposable
         {
             private readonly Document _document;
             private readonly Database _database;
             private readonly Editor _editor;
             private readonly IList<DynamicBlockCandidate> _dynamicBlocks;
-            private readonly Point3d _firstCorner;
-            private readonly Point3d _oppositeCorner;
+            private readonly StretchSelection _selection;
             private readonly Point3d _basePoint;
             private readonly DynamicBlockPreview _preview;
             private bool _nativeStretchStarted;
@@ -213,23 +224,19 @@ namespace HvacAiCadAddin.Commands
                 Database database,
                 Editor editor,
                 IList<DynamicBlockCandidate> dynamicBlocks,
-                Point3d firstCorner,
-                Point3d oppositeCorner,
+                StretchSelection selection,
                 Point3d basePoint)
             {
                 _document = document;
                 _database = database;
                 _editor = editor;
                 _dynamicBlocks = dynamicBlocks;
-                _firstCorner = firstCorner;
-                _oppositeCorner = oppositeCorner;
+                _selection = selection;
                 _basePoint = basePoint;
                 _preview = new DynamicBlockPreview(
                     database,
                     editor,
                     dynamicBlocks,
-                    firstCorner,
-                    oppositeCorner,
                     basePoint);
             }
 
@@ -247,10 +254,10 @@ namespace HvacAiCadAddin.Commands
                 // Do not append a second point. The final newline submits the
                 // base point, leaving STRETCH interactively at its second-
                 // point prompt, where AutoCAD renders the native preview.
+                // The empty line before the base point ends object selection.
                 _document.SendStringToExecute(
-                    "_.STRETCH\n_C\n" +
-                    ToCommandPoint(_firstCorner) + "\n" +
-                    ToCommandPoint(_oppositeCorner) + "\n\n" +
+                    "_.STRETCH\n" +
+                    _selection.ToCommandText() + "\n" +
                     ToCommandPoint(_basePoint) + "\n",
                     true,
                     false,
@@ -282,8 +289,6 @@ namespace HvacAiCadAddin.Commands
                             _database,
                             _editor,
                             _dynamicBlocks,
-                            _firstCorner,
-                            _oppositeCorner,
                             secondPoint - _basePoint);
                     }
                 }
@@ -349,8 +354,6 @@ namespace HvacAiCadAddin.Commands
             Database database,
             Editor editor,
             IEnumerable<DynamicBlockCandidate> dynamicBlocks,
-            Point3d firstCorner,
-            Point3d oppositeCorner,
             Vector3d requestedDisplacement)
         {
             int changedCount = 0;
@@ -372,12 +375,12 @@ namespace HvacAiCadAddin.Commands
                     if (axis == null)
                         continue;
 
-                    bool startSelected = axis.IsStartInsideCrossing(
-                        firstCorner,
-                        oppositeCorner);
-                    bool endSelected = axis.IsEndInsideCrossing(
-                        firstCorner,
-                        oppositeCorner);
+                    bool startSelected;
+                    bool endSelected;
+                    candidate.GetEndsSelected(
+                        axis,
+                        out startSelected,
+                        out endSelected);
 
                     // No end, or both ends: preserve native STRETCH's result.
                     // A complete block crossing is a normal move operation.
@@ -460,8 +463,6 @@ namespace HvacAiCadAddin.Commands
             private readonly Database _database;
             private readonly Editor _editor;
             private readonly IList<DynamicBlockCandidate> _dynamicBlocks;
-            private readonly Point3d _firstCorner;
-            private readonly Point3d _oppositeCorner;
             private readonly Point3d _basePoint;
             // References the preview has changed and must put back. A fully
             // crossed reference is never changed here, so native STRETCH's
@@ -477,15 +478,11 @@ namespace HvacAiCadAddin.Commands
                 Database database,
                 Editor editor,
                 IList<DynamicBlockCandidate> dynamicBlocks,
-                Point3d firstCorner,
-                Point3d oppositeCorner,
                 Point3d basePoint)
             {
                 _database = database;
                 _editor = editor;
                 _dynamicBlocks = dynamicBlocks;
-                _firstCorner = firstCorner;
-                _oppositeCorner = oppositeCorner;
                 _basePoint = basePoint;
             }
 
@@ -545,12 +542,12 @@ namespace HvacAiCadAddin.Commands
                         if (axis == null)
                             continue;
 
-                        bool startSelected = axis.IsStartInsideCrossing(
-                            _firstCorner,
-                            _oppositeCorner);
-                        bool endSelected = axis.IsEndInsideCrossing(
-                            _firstCorner,
-                            _oppositeCorner);
+                        bool startSelected;
+                        bool endSelected;
+                        candidate.GetEndsSelected(
+                            axis,
+                            out startSelected,
+                            out endSelected);
                         if (startSelected == endSelected)
                             continue;
 
@@ -651,7 +648,8 @@ namespace HvacAiCadAddin.Commands
                 double originalPropertyValue,
                 Point3d originalPosition,
                 AxisInfo xAxis,
-                AxisInfo yAxis)
+                AxisInfo yAxis,
+                SelectionArea area)
             {
                 ObjectId = objectId;
                 PropertyName = propertyName;
@@ -659,6 +657,7 @@ namespace HvacAiCadAddin.Commands
                 OriginalPosition = originalPosition;
                 XAxis = xAxis;
                 YAxis = yAxis;
+                Area = area;
             }
 
             public ObjectId ObjectId { get; private set; }
@@ -667,6 +666,31 @@ namespace HvacAiCadAddin.Commands
             public Point3d OriginalPosition { get; private set; }
             public AxisInfo XAxis { get; private set; }
             public AxisInfo YAxis { get; private set; }
+            // The area that selected this block; null when it was picked.
+            public SelectionArea Area { get; private set; }
+
+            // Which ends of the axis lie inside the area that selected the
+            // block. A picked block has no area and counts as fully crossed,
+            // so native STRETCH moves it whole and its size is kept.
+            public void GetEndsSelected(
+                AxisInfo axis,
+                out bool startSelected,
+                out bool endSelected)
+            {
+                if (Area == null)
+                {
+                    startSelected = true;
+                    endSelected = true;
+                    return;
+                }
+
+                startSelected = axis.IsStartInsideCrossing(
+                    Area.FirstCorner,
+                    Area.OppositeCorner);
+                endSelected = axis.IsEndInsideCrossing(
+                    Area.FirstCorner,
+                    Area.OppositeCorner);
+            }
 
             public AxisInfo GetAxisFor(Vector3d displacement)
             {
@@ -755,6 +779,324 @@ namespace HvacAiCadAddin.Commands
                         maximumProjection = Math.Max(maximumProjection, projection);
                     }
                 }
+            }
+        }
+
+        // One crossing/window rectangle or polygon the user selected with, in
+        // UCS like the corners GetPoint used to return.
+        private sealed class SelectionArea
+        {
+            public SelectionArea(bool isWindow, List<Point3d> points)
+            {
+                IsWindow = isWindow;
+                Points = points;
+
+                // The rectangle the dynamic-block end test uses: the two
+                // corners themselves, or a polygon's bounding rectangle.
+                double minimumX = double.MaxValue;
+                double minimumY = double.MaxValue;
+                double maximumX = double.MinValue;
+                double maximumY = double.MinValue;
+                foreach (Point3d point in points)
+                {
+                    minimumX = Math.Min(minimumX, point.X);
+                    minimumY = Math.Min(minimumY, point.Y);
+                    maximumX = Math.Max(maximumX, point.X);
+                    maximumY = Math.Max(maximumY, point.Y);
+                }
+
+                FirstCorner = new Point3d(minimumX, minimumY, points[0].Z);
+                OppositeCorner = new Point3d(maximumX, maximumY, points[0].Z);
+                ReplayIds = new HashSet<ObjectId>();
+            }
+
+            public bool IsWindow { get; private set; }
+            // Two opposite corners for a rectangle, three or more vertices
+            // for a polygon.
+            public List<Point3d> Points { get; private set; }
+            public Point3d FirstCorner { get; private set; }
+            public Point3d OppositeCorner { get; private set; }
+            // What replaying this area into native STRETCH will select.
+            public HashSet<ObjectId> ReplayIds { get; set; }
+
+            private bool IsPolygon
+            {
+                get { return Points.Count > 2; }
+            }
+
+            // Reads the area from the pick points AutoCAD reports for an
+            // object selected by crossing or window. A rectangle comes back as
+            // its four corners, a polygon as its vertices (see ssnamex).
+            // Returns null when the points cannot describe an area.
+            public static SelectionArea TryCreate(
+                Editor editor,
+                bool isWindow,
+                PickPointDescriptor[] pickPoints)
+            {
+                if (pickPoints == null || pickPoints.Length < 2)
+                    return null;
+
+                // The descriptors are lines of sight in WCS. Take each one
+                // onto the UCS XY plane, where GetPoint used to return it.
+                Matrix3d wcsToUcs = editor.CurrentUserCoordinateSystem.Inverse();
+                List<Point3d> vertices = new List<Point3d>();
+                foreach (PickPointDescriptor pickPoint in pickPoints)
+                    vertices.Add(ToUcsPlanePoint(pickPoint, wcsToUcs));
+
+                // Replay a plain crossing/window as "_C p1 p2" / "_W p1 p2".
+                if (vertices.Count == 4 && IsAxisAlignedRectangle(vertices))
+                    vertices = new List<Point3d> { vertices[0], vertices[2] };
+
+                return new SelectionArea(isWindow, vertices);
+            }
+
+            private static Point3d ToUcsPlanePoint(
+                PickPointDescriptor pickPoint,
+                Matrix3d wcsToUcs)
+            {
+                Point3d point = pickPoint.PointOnLine.TransformBy(wcsToUcs);
+                Vector3d direction = pickPoint.Direction.TransformBy(wcsToUcs);
+                if (Math.Abs(direction.Z) <= PointTolerance)
+                    return point;
+
+                double distance = -point.Z / direction.Z;
+                return new Point3d(
+                    point.X + direction.X * distance,
+                    point.Y + direction.Y * distance,
+                    0.0);
+            }
+
+            private static bool IsAxisAlignedRectangle(List<Point3d> corners)
+            {
+                bool horizontalFirst =
+                    Near(corners[0].Y, corners[1].Y) &&
+                    Near(corners[1].X, corners[2].X) &&
+                    Near(corners[2].Y, corners[3].Y) &&
+                    Near(corners[3].X, corners[0].X);
+                bool verticalFirst =
+                    Near(corners[0].X, corners[1].X) &&
+                    Near(corners[1].Y, corners[2].Y) &&
+                    Near(corners[2].X, corners[3].X) &&
+                    Near(corners[3].Y, corners[0].Y);
+                return horizontalFirst || verticalFirst;
+            }
+
+            private static bool Near(double first, double second)
+            {
+                return Math.Abs(first - second) <= 1e-6;
+            }
+
+            public bool IsSameAs(SelectionArea other)
+            {
+                if (IsWindow != other.IsWindow ||
+                    Points.Count != other.Points.Count)
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < Points.Count; i++)
+                {
+                    if (!Near(Points[i].X, other.Points[i].X) ||
+                        !Near(Points[i].Y, other.Points[i].Y))
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            // The objects AutoCAD selects from this area right now. The view
+            // is unchanged since the user selected, so native STRETCH selects
+            // the same objects when the area is replayed.
+            public HashSet<ObjectId> Select(Editor editor)
+            {
+                HashSet<ObjectId> objectIds = new HashSet<ObjectId>();
+                try
+                {
+                    PromptSelectionResult result;
+                    if (IsPolygon)
+                    {
+                        Point3dCollection polygon =
+                            new Point3dCollection(Points.ToArray());
+                        result = IsWindow
+                            ? editor.SelectWindowPolygon(polygon)
+                            : editor.SelectCrossingPolygon(polygon);
+                    }
+                    else
+                    {
+                        result = IsWindow
+                            ? editor.SelectWindow(Points[0], Points[1])
+                            : editor.SelectCrossingWindow(Points[0], Points[1]);
+                    }
+
+                    if (result.Status == PromptStatus.OK)
+                    {
+                        foreach (ObjectId objectId in result.Value.GetObjectIds())
+                            objectIds.Add(objectId);
+                    }
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception)
+                {
+                    // An area AutoCAD rejects selects nothing; its objects
+                    // are then replayed as picks.
+                }
+
+                return objectIds;
+            }
+
+            // STRETCH "Select objects:" input that re-makes this selection.
+            public string ToCommandText()
+            {
+                string method = IsPolygon
+                    ? (IsWindow ? "_WP" : "_CP")
+                    : (IsWindow ? "_W" : "_C");
+
+                StringBuilder text = new StringBuilder();
+                text.Append(method).Append('\n');
+                foreach (Point3d point in Points)
+                    text.Append(ToCommandPoint(point)).Append('\n');
+                if (IsPolygon)
+                    text.Append('\n'); // an empty line closes the polygon
+                return text.ToString();
+            }
+        }
+
+        // What the user selected, in the terms native STRETCH can replay: the
+        // areas they made, objects those areas would select but the user
+        // removed, and objects they picked.
+        private sealed class StretchSelection
+        {
+            private readonly List<SelectionArea> _areas = new List<SelectionArea>();
+            // The final selection, in selection order.
+            private readonly List<ObjectId> _objectIds = new List<ObjectId>();
+            // The area that selected each object; null when it was picked.
+            private readonly Dictionary<ObjectId, SelectionArea> _areaByObject =
+                new Dictionary<ObjectId, SelectionArea>();
+            private readonly List<ObjectId> _removed = new List<ObjectId>();
+            private readonly List<ObjectId> _picked = new List<ObjectId>();
+
+            public IList<ObjectId> ObjectIds
+            {
+                get { return _objectIds; }
+            }
+
+            public SelectionArea GetArea(ObjectId objectId)
+            {
+                return _areaByObject[objectId];
+            }
+
+            public static StretchSelection Read(
+                Editor editor,
+                SelectionSet selectionSet)
+            {
+                StretchSelection selection = new StretchSelection();
+                foreach (SelectedObject selected in selectionSet)
+                {
+                    ObjectId objectId = selected.ObjectId;
+                    if (selection._areaByObject.ContainsKey(objectId))
+                        continue;
+
+                    selection._objectIds.Add(objectId);
+                    selection._areaByObject.Add(
+                        objectId,
+                        selection.FindArea(editor, selected));
+                }
+
+                selection.PlanReplay(editor);
+                return selection;
+            }
+
+            // The area that selected the object, shared with every other
+            // object it selected, or null for a pick, fence or other method.
+            private SelectionArea FindArea(Editor editor, SelectedObject selected)
+            {
+                CrossingOrWindowSelectedObject byArea =
+                    selected as CrossingOrWindowSelectedObject;
+                if (byArea == null ||
+                    (selected.SelectionMethod != SelectionMethod.Crossing &&
+                     selected.SelectionMethod != SelectionMethod.Window))
+                {
+                    return null;
+                }
+
+                SelectionArea area = SelectionArea.TryCreate(
+                    editor,
+                    selected.SelectionMethod == SelectionMethod.Window,
+                    byArea.GetPickPoints());
+                if (area == null)
+                    return null;
+
+                foreach (SelectionArea known in _areas)
+                {
+                    if (known.IsSameAs(area))
+                        return known;
+                }
+
+                _areas.Add(area);
+                return area;
+            }
+
+            // Works out what replaying the areas selects, so the replay can
+            // remove what the user removed and add what they picked.
+            private void PlanReplay(Editor editor)
+            {
+                HashSet<ObjectId> final = new HashSet<ObjectId>(_objectIds);
+                HashSet<ObjectId> replayed = new HashSet<ObjectId>();
+                foreach (SelectionArea area in _areas)
+                {
+                    area.ReplayIds = area.Select(editor);
+                    foreach (ObjectId objectId in area.ReplayIds)
+                    {
+                        if (replayed.Add(objectId) && !final.Contains(objectId))
+                            _removed.Add(objectId);
+                    }
+                }
+
+                foreach (ObjectId objectId in _objectIds)
+                {
+                    SelectionArea area = _areaByObject[objectId];
+                    if (area != null && area.ReplayIds.Contains(objectId))
+                        continue;
+
+                    // Picked, or its area would not select it again: it is
+                    // picked in the replay and counts as fully crossed. An
+                    // area replayed first would select it as a crossing, so
+                    // remove it there and add it back as a pick.
+                    _areaByObject[objectId] = null;
+                    _picked.Add(objectId);
+                    if (replayed.Contains(objectId))
+                        _removed.Add(objectId);
+                }
+            }
+
+            // STRETCH "Select objects:" input: each area, then the removals,
+            // then the picks. The caller ends the selection.
+            public string ToCommandText()
+            {
+                StringBuilder text = new StringBuilder();
+                foreach (SelectionArea area in _areas)
+                    text.Append(area.ToCommandText());
+
+                if (_removed.Count > 0)
+                {
+                    text.Append("_R\n");
+                    foreach (ObjectId objectId in _removed)
+                        text.Append(ToHandleText(objectId));
+                    if (_picked.Count > 0)
+                        text.Append("_A\n");
+                }
+
+                foreach (ObjectId objectId in _picked)
+                    text.Append(ToHandleText(objectId));
+                return text.ToString();
+            }
+
+            // An AutoLISP expression that returns the entity, which a
+            // selection prompt accepts like a click on it.
+            private static string ToHandleText(ObjectId objectId)
+            {
+                return "(handent \"" + objectId.Handle.ToString() + "\")\n";
             }
         }
     }
