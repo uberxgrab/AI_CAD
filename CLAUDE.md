@@ -87,7 +87,7 @@ parser.load_dxf -> extract_entities      RawEntity
 
 | Command | Source | Behavior |
 | --- | --- | --- |
-| `HVACSTRETCH` | `cad_addin/src/HvacStretch.cs` | Mixed native/dynamic stretch from one Crossing rectangle. Main current feature. |
+| `HVACSTRETCH` | `cad_addin/src/HvacStretch.cs` | Mixed native/dynamic stretch from one AutoCAD object selection (crossing/window, polygon, picks, Shift-removal). Main current feature. |
 | `HVACQTO` | `cad_addin/src/HvacQuantityTakeoff.cs`, `HvacQuantityTakeoffCore.cs`, `TakeoffSettingsForm.cs` | Exports the pickfirst set, or a new `GetSelection`, to a SpreadsheetML `.xml` workbook laid out like the VRV quotation template, with formulas and a contingency factor cell. |
 | `HVACCOUNT` | `cad_addin/src/TQO.cs` | Totals `Line` and `Polyline` lengths on layers that start with `!` and contain `x` (case-insensitive). |
 | `FIRSTMESSAGE` | `cad_addin/src/Message.cs` | Writes a hello message to the command line. |
@@ -158,8 +158,15 @@ Do not reverse these without discussing it with the user.
 - Use native AutoCAD `STRETCH` for ordinary entities instead of reimplementing
   grip behavior. This preserves AutoCAD's Crossing selection and entity-specific
   stretch semantics.
-- Capture one Crossing rectangle and replay the same coordinates into native
-  STRETCH, so users do not select ordinary entities twice.
+- Select objects once with `Editor.GetSelection`, so crossing/window by dragging,
+  polygons, repeated selections, single picks and Shift-removal behave as in native
+  STRETCH. Read back each object's selection area (crossing/window rectangle or
+  polygon, from `CrossingOrWindowSelectedObject.GetPickPoints`) and replay the
+  user's selection into native STRETCH: each area (`_C`, `_W`, `_CP`, `_WP`), then
+  `_R` with `(handent ...)` for objects the areas would select but the user
+  removed, then picked objects as `(handent ...)`. Users do not select ordinary
+  entities twice. The previous single-Crossing-rectangle behaviour is tagged
+  `hvacstretch-before-selection`.
 - Do not use `Editor.Command` with a pre-supplied second point when preview is
   required. It completes STRETCH synchronously, leaving no rubber-band phase.
   `SendStringToExecute` stops after the base point so STRETCH owns the
@@ -176,9 +183,11 @@ Do not reverse these without discussing it with the user.
   polylines in the `REC_`/`Round D` duct blocks, and is a world-aligned box that is
   too wide for rotated references. It is only the fallback when nothing visible can
   be measured. The previous behaviour is tagged `hvacstretch-before-s1`.
-- Detect which end is crossed by projecting the Crossing rectangle and block
-  extents onto the chosen axis. After changing the distance property, align the
-  unselected end back to its original projection to keep it fixed.
+- Detect which end is crossed by projecting the rectangle of the area that selected
+  the block (a polygon's bounding rectangle) and block extents onto the chosen axis.
+  A block selected by a pick counts as fully crossed and is moved whole. After
+  changing the distance property, align the unselected end back to its original
+  projection to keep it fixed.
 - Scope is limited to X/Y-aligned linear parameters.
   `DynamicBlockReferenceProperty` does not expose parameter direction, so
   arbitrary directions need per-block mapping or a more capable API strategy.

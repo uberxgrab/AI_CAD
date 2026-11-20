@@ -22,8 +22,9 @@ initial focus on HVAC. The intended product areas are:
 - `HVACCOUNT` in `cad_addin/src/TQO.cs` totals `Line` and `Polyline` lengths
   on layers whose names start with `!` and contain `x`.
 - `HVACSTRETCH` in `cad_addin/src/HvacStretch.cs` has been implemented as a
-  mixed native/dynamic stretch command. It accepts one Crossing rectangle,
-  uses AutoCAD's real `STRETCH` for ordinary entities, and applies a dynamic
+  mixed native/dynamic stretch command. It selects objects with AutoCAD's own
+  selection prompt (crossing/window by dragging, polygons, several selections,
+  picks, Shift-removal), uses AutoCAD's real `STRETCH` for ordinary entities, and applies a dynamic
   block distance-property change when exactly one end of a supported dynamic
   block is crossed.
 - `HVACQTO` exports a quantity takeoff to an Excel-compatible SpreadsheetML
@@ -43,7 +44,7 @@ initial focus on HVAC. The intended product areas are:
 | --- | --- | --- |
 | CAD drafting tools | Active | `HVACSTRETCH` is the main drafting feature. |
 | Dynamic block stretching | Implemented; requires in-AutoCAD acceptance testing | Supported property names are `Distance3`, `Distance`, `Length`, and `Width`; the property must be numeric, writable, and backed by a Dynamic Block Stretch Action. |
-| Native STRETCH preview | Implemented; requires in-AutoCAD acceptance testing | `SendStringToExecute` sends STRETCH, the stored Crossing window, and base point only. AutoCAD owns the interactive second-point prompt for its normal preview; `PointMonitor` previews eligible dynamic blocks at the same time. |
+| Native STRETCH preview | Implemented; requires in-AutoCAD acceptance testing | `SendStringToExecute` sends STRETCH, the replayed selection (areas, removals, picks), and base point only. AutoCAD owns the interactive second-point prompt for its normal preview; `PointMonitor` previews eligible dynamic blocks at the same time. |
 | Quantity takeoff | `HVACQTO` largely complete | `HVACQTO` exports equipment, duct sheet area by thickness, and pipes. `HVACCOUNT` covers line/polyline lengths only. Valve takeoff and attribute-based equipment takeoff are planned. There is no common MEP object/quantity schema yet. |
 | Heat-load calculation | Planned | No area/room extraction, design conditions, thermal assumptions, or calculation engine has been implemented. |
 | DXF validation / AI error detection | Rule-based foundation present | The Python pipeline performs deterministic checks. AI-based inference, training/evaluation data, and CAD-facing issue review workflows are still planned. |
@@ -82,9 +83,21 @@ initial focus on HVAC. The intended product areas are:
 - Use the native AutoCAD `STRETCH` command for ordinary entities instead of
   reimplementing grip behavior. This preserves AutoCAD's established Crossing
   selection and entity-specific stretch semantics.
-- Capture a single Crossing rectangle in `HVACSTRETCH` and replay those same
-  coordinates into native STRETCH. This avoids making users select ordinary
-  entities a second time.
+- Select objects once in `HVACSTRETCH` with `Editor.GetSelection` (message
+  "Select objects to stretch by crossing-window or crossing-polygon..."), so
+  selection behaves like native STRETCH: implied crossing/window by dragging,
+  `CP`/`WP` polygons, repeated selections, single picks, and Shift-removal. Read
+  each object's selection area back from `CrossingOrWindowSelectedObject.
+  GetPickPoints` (a plain rectangle comes back as four corners, a polygon as its
+  vertices) and replay the user's selection into native STRETCH: each area
+  (`_C`, `_W`, `_CP`, `_WP`), then `_R` plus `(handent "<handle>")` for objects
+  the areas would select but the user removed, then `_A` and `(handent ...)` for
+  picked objects. This avoids making users select ordinary entities a second
+  time. Each dynamic block is judged against the rectangle of the area that
+  selected it (a polygon's bounding rectangle); a picked block counts as fully
+  crossed and is moved whole. The previous single-Crossing-rectangle behaviour
+  is tagged `hvacstretch-before-selection`. Whether `(handent ...)` is accepted at
+  STRETCH's "Select objects:" prompt is the first thing to test manually.
 - Do not use `Editor.Command` with a pre-supplied second point when preview is
   required. It completes STRETCH synchronously, so AutoCAD has no interactive
   rubber-band phase. `SendStringToExecute` stops after the base point so the
@@ -98,8 +111,8 @@ initial focus on HVAC. The intended product areas are:
   block's local X and Y axes. Bounds are taken from `BlockReference`
   `GeometricExtents` rather than the block definition because dynamic blocks
   can use anonymous definitions after actions run.
-- Detect whether the start or end is crossed by projecting both the Crossing
-  rectangle and block extents onto the chosen local axis. After changing the
+- Detect whether the start or end is crossed by projecting both the
+  selection-area rectangle and block extents onto the chosen local axis. After changing the
   distance property, align the unselected end back to its original projection.
   This is intended to keep the opposite end fixed for either-end stretching.
 - Current scope is intentionally limited to X/Y-aligned linear dynamic
