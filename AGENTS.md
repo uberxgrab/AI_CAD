@@ -1130,3 +1130,106 @@ generated `out/` files unless intentionally updating a fixture.
 There is no `.gitignore`. `cad_addin/bin/`, `cad_addin/obj/`, and `out/` are
 tracked, and `.tmp_test_runs/` files have been staged by accident before. Check
 `git status` and the staged list before committing.
+
+
+## HVACPOWERWIRE: draw the indoor-unit power wire
+
+The user approved this spec on 2026-11-20. Units are drawing millimetres. The command turns a
+rough tree of LINEs and polylines into the series (daisy-chain) power supply wire of the indoor
+units. It needs in-AutoCAD acceptance testing.
+
+1. **Input.** The user draws a rough tree: a trunk from the supply end, and a short branch off
+   it to each indoor unit. The end of a branch is the unit's terminal point P. Select the lines
+   (pickfirst or a new selection), then pick the supply end of the wire (the root).
+2. **Settings,** with defaults, remembered in `%APPDATA%\HvacAiCadAddin\HVACPOWERWIRE.settings`:
+
+   | Setting | Default |
+   | --- | --- |
+   | Weld tolerance | 50 |
+   | Angle tolerance | 10° |
+   | Base angle | UCS X |
+   | Hook slant size s | 300 |
+   | A trunk end past the last branch is a unit from | 1000 |
+   | Wire layer | `EIA_5 SUPPLY WIRE` (or `EIA_5 SIGNAL WIRE`) |
+   | Write cable text | on |
+   | Text | `2x1.5 MM2` |
+   | Text height | 275 |
+
+3. **Clean.** `RefrigCleaner.Run` with no root: weld, T-splits, orthogonalise against the base
+   angle, merge jogs and collinear nodes. With no root it places no refnets and checks no piping
+   rules. Pipe ends never move, so a branch is straightened onto its unit and the T joint on the
+   trunk follows it. The same input checks apply (arcs and loops are refused).
+4. **Tree.** `DrainNetwork.Build` makes the tree from the wire end nearest the picked point (it
+   must be within the pick tolerance). The key nodes are the root, the units (wire ends), the T
+   junctions and crosses. Lines of another network are kept as cleaned and reported. A joint of 4
+   or more wires is refused.
+5. **The hook.** At each T junction the through branch is the one that goes on straighter along the
+   arriving direction `a` (unit vector along the trunk); the other is the branch, direction `b`
+   from the trunk toward the unit, length L. The wire replaces the junction by the hook of the
+   template's legend glyph (three lines in `EIA_5 SUPPLY WIRE`: a 922 drop, a 45° 200 x 200 slant
+   and a 722 rise, tops level):
+   - the wire arrives along the trunk at T and runs down the branch to P (the drop leg, length L);
+   - from P a 45° slant to Q = P + s·a − s·b (s along the trunk, away from the arrival side, and s
+     back toward the trunk; length s·1.414);
+   - from Q straight back to the trunk at T + s·a (the rise leg, L − s long, parallel to the drop
+     leg and s from it), then on along the trunk to the next unit.
+6. **Series order.** Units are numbered U1, U2, ... in depth-first order along the trunk from the
+   root, branches in order of distance along it. One wire is one continuous polyline.
+   - **Last unit.** The last unit of a wire gets only the drop leg (no slant, no rise), and the
+     wire ends there. A unit at the end of the trunk itself (a wire end with no branch) is the last
+     unit: the wire just ends there.
+   - **Trunk end past the last branch.** A tail shorter than the trunk-end setting (and at least
+     one hook, s + 50) is an overshoot: the trunk is trimmed at the last junction and its branch is
+     the last unit. A longer tail is a unit of its own, so the earlier branches are all hooked.
+   - **Plain drop.** A branch that is shorter than s + 50, has a bend, does not leave the trunk at a
+     right angle (within the angle tolerance), or whose next bend or junction along the trunk is
+     closer than s + 50, keeps a plain drop: the trunk goes straight on and the branch stays a
+     separate line from T to P, circled in the preview and warned. A plain drop is not in series.
+   - **Sub-trunks.** A branch that has junctions of its own is a sub-trunk. Its units get a separate
+     wire that starts at the trunk, numbered in depth-first order where it starts, and each wire
+     has its own last unit.
+7. **Preview and confirm.** Transient graphics: the wire in green, the supply end in a red circle,
+   the plain drops in yellow circles and the labels U1, U2, ... in series order. Notes (trimmed
+   ends, sub-trunks) and warnings print on the command line. Yes/No, default Yes. Cancel writes
+   nothing.
+8. **Write,** in one transaction (one undo group):
+   - One new LWPOLYLINE per wire, and per plain drop, on the chosen layer (colour, linetype and
+     lineweight ByLayer, elevation of the supply-end pipe). The layer is imported from the template
+     when the drawing lacks it. The selected curves are erased.
+   - **Cable text** when on: a TEXT with the string, style `T_unicode` if the drawing has it
+     (otherwise the current style), the text height, on the wire layer, tagged with
+     `HVACAI_POWERWIRE` xdata. It runs along the rise leg (rotation 90° from the trunk), from 0.25
+     of its height above the slant's top, with its glyphs on the side the trunk goes on, one text
+     height off the leg. It reads upright (rotation in (−90°, 90°]; text that would read the other
+     way is right justified so it still ends at the leg). A unit with no rise leg gets the text
+     beside its drop leg, a trunk-end unit beside the end of the wire.
+   - A rerun replaces the tagged texts within `s + 3 x text height` of the old or the new wire.
+
+**Choices the code made** (for review):
+
+- **Trunk end or overshoot.** Whether a tail past the last branch is a unit is not drawn anywhere;
+  the rule above (a setting, default 1000) decides. A trimmed tail is reported.
+- **Plain drops** are separate lines, because a wire cannot go down a branch and back in series. A
+  last unit never needs a hook, so it never gets a warning.
+- **Text side.** The approved spec puts the text beside the rise leg; the template's legend text sits on the
+  other side of the drop leg, about 450 from it.
+- **Text layer** is the wire layer (the template's `2x1.5 MM2` texts are on `EIA_5 SIGNAL WIRE`).
+- **Through branch** of a junction is the straighter one; a bull-head tee has no straight branch, so
+  it gets a plain drop.
+- Files: `PowerWireCore.cs` (AutoCAD-free: settings, planner, hook and text geometry; tested by
+  `tests/PipeCoreTests/PowerWireTests.cs`), `PowerWireWriter.cs`, `PowerWireSettingsForm.cs`,
+  `HvacPowerWire.cs` (command). It reuses `RefrigCleaner`, `DrainNetwork`, `PipeTransients`,
+  `PipeDrawingLibrary` (`EnsureNamedLayer`, `FindTextStyle`) and `RefrigSizeWriter` (`EnsureRegApp`,
+  `RemoveOldLabels`) unchanged.
+
+**Manual tests in AutoCAD** (after `NETLOAD` of the rebuilt x64 DLL):
+
+1. Draw a trunk with three short branches down to three unit symbols, slightly off square, and run
+   `HVACPOWERWIRE`. Pick the supply end. Check the preview: green wire with a hook at each branch,
+   U1 to U3 in order from the supply end, the last unit with only its drop leg.
+2. Answer Yes. Check the layer, one polyline per wire, the originals gone, the `2x1.5 MM2` texts
+   beside each rise leg, and that one `UNDO` removes everything.
+3. Run again on a new rough drawing near the old wire: the old texts are replaced.
+4. Draw one branch only 200 long, or two branches 200 apart: they keep a plain drop and are circled.
+5. Try a rotated UCS and a base angle other than 0, a trunk end 500 past the last branch (trimmed)
+   and 3000 past it (a unit), a branch with its own T (a sub-trunk), and Esc at each prompt.
