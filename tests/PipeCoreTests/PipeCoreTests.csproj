@@ -32,6 +32,8 @@
     <Compile Include="..\..\cad_addin\src\PipeSettingsCore.cs" Link="PipeSettingsCore.cs" />
     <Compile Include="..\..\cad_addin\src\PipeNetworkCore.cs" Link="PipeNetworkCore.cs" />
     <Compile Include="..\..\cad_addin\src\RefrigCleanerCore.cs" Link="RefrigCleanerCore.cs" />
+    <Compile Include="..\..\cad_addin\src\NetworkTopologyCore.cs" Link="NetworkTopologyCore.cs" />
+    <Compile Include="..\..\cad_addin\src\RefrigSizingCore.cs" Link="RefrigSizingCore.cs" />
   </ItemGroup>
 
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
