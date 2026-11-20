@@ -34,6 +34,11 @@
     <Compile Include="..\..\cad_addin\src\RefrigCleanerCore.cs" Link="RefrigCleanerCore.cs" />
     <Compile Include="..\..\cad_addin\src\NetworkTopologyCore.cs" Link="NetworkTopologyCore.cs" />
     <Compile Include="..\..\cad_addin\src\RefrigSizingCore.cs" Link="RefrigSizingCore.cs" />
+    <Compile Include="..\..\cad_addin\src\DrainSettingsCore.cs" Link="DrainSettingsCore.cs" />
+    <Compile Include="..\..\cad_addin\src\DrainNetworkCore.cs" Link="DrainNetworkCore.cs" />
+    <Compile Include="..\..\cad_addin\src\DrainGeometryCore.cs" Link="DrainGeometryCore.cs" />
+    <Compile Include="..\..\cad_addin\src\DrainSizingCore.cs" Link="DrainSizingCore.cs" />
+    <Compile Include="..\..\cad_addin\src\DrainPlanCore.cs" Link="DrainPlanCore.cs" />
   </ItemGroup>
 
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
