@@ -10,7 +10,7 @@ using HvacAiCadAddin.Ducts;
 namespace HvacAiCadAddin.Pipes
 {
     // Temporary graphics for the pipe commands: a highlight of the run HVACPIPESIZE found, and the
-    // preview and problem markers of HVACREFRIG. Transient graphics never touch the drawing.
+    // preview, size labels and problem markers of HVACREFRIG. Transient graphics never touch the drawing.
     internal sealed class PipeTransients : IDisposable
     {
         private readonly List<Entity> _shown = new List<Entity>();
@@ -60,6 +60,26 @@ namespace HvacAiCadAddin.Pipes
             Circle circle = new Circle(new Point3d(centre.X, centre.Y, elevation), Vector3d.ZAxis, radius);
             circle.ColorIndex = colorIndex;
             Show(circle);
+        }
+
+        /// <summary>A text label at a point, as a transient (left-aligned at its base point).</summary>
+        public void AddText(Vec2 position, string text, double height, short colorIndex, double elevation)
+        {
+            DBText label = new DBText();
+            try
+            {
+                label.SetDatabaseDefaults();
+            }
+            catch (System.Exception)
+            {
+                // Without the database defaults the text may use no style; the label is still shown.
+            }
+
+            label.Position = new Point3d(position.X, position.Y, elevation);
+            label.Height = height;
+            label.TextString = text;
+            label.ColorIndex = colorIndex;
+            Show(label);
         }
 
         private void Show(Entity entity)

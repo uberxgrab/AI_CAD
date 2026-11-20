@@ -16,17 +16,54 @@ namespace HvacAiCadAddin.Pipes
         public int Paths;
         public int Refnets;
         public int Erased;
+        /// <summary>Sized segments written (HVACREFRIG with sizing).</summary>
+        public int Sized;
+        public int Labels;
+        public int LabelsRemoved;
+        /// <summary>Existing refnet blocks moved onto their inlet pipe's layer.</summary>
+        public int RefnetsRelayered;
+        /// <summary>Old size labels left in place because their layer is locked.</summary>
+        public int LabelsLocked;
+    }
+
+    /// <summary>A refnet block already in the drawing, with its three port points.</summary>
+    internal sealed class ExistingRefnet
+    {
+        public ObjectId Id;
+        /// <summary><see cref="RefnetPortGroup.Id"/> is this refnet's index in the list it came from.</summary>
+        public RefnetPortGroup Ports;
     }
 
     internal static class RefrigWriter
     {
         /// <summary>
         /// The three port points (inlet, main outlet, branch outlet) of every refnet block already in
-        /// the current space, so the core can leave a node that already has one alone.
+        /// the current space, so the core can leave a node that already has one alone. Three consecutive
+        /// points are one block.
         /// </summary>
         internal static List<Vec2> FindRefnetPorts(Database db)
         {
+            return PortsOf(FindRefnets(db));
+        }
+
+        /// <summary>The ports of the refnets as a flat list, three per block: inlet, main outlet, branch outlet.</summary>
+        internal static List<Vec2> PortsOf(IEnumerable<ExistingRefnet> refnets)
+        {
             List<Vec2> ports = new List<Vec2>();
+            foreach (ExistingRefnet refnet in refnets)
+            {
+                ports.Add(refnet.Ports.Inlet);
+                ports.Add(refnet.Ports.Main);
+                ports.Add(refnet.Ports.Branch);
+            }
+
+            return ports;
+        }
+
+        /// <summary>The refnet blocks already in the current space, each with its ports.</summary>
+        internal static List<ExistingRefnet> FindRefnets(Database db)
+        {
+            List<ExistingRefnet> refnets = new List<ExistingRefnet>();
             using (Transaction transaction = db.TransactionManager.StartTransaction())
             {
                 BlockTableRecord space = (BlockTableRecord)transaction.GetObject(
@@ -51,21 +88,29 @@ namespace HvacAiCadAddin.Pipes
                         continue;
 
                     Matrix3d transform = block.BlockTransform;
-                    AddPort(ports, transform, 0, 0);
-                    AddPort(ports, transform, RefrigSettings.RefnetLength, 0);
-                    AddPort(ports, transform, RefrigSettings.RefnetLength, -RefrigSettings.RefnetBranchOffset);
+                    refnets.Add(new ExistingRefnet
+                    {
+                        Id = id,
+                        Ports = new RefnetPortGroup
+                        {
+                            Id = refnets.Count,
+                            Inlet = Port(transform, 0, 0),
+                            Main = Port(transform, RefrigSettings.RefnetLength, 0),
+                            Branch = Port(transform, RefrigSettings.RefnetLength, -RefrigSettings.RefnetBranchOffset)
+                        }
+                    });
                 }
 
                 transaction.Commit();
             }
 
-            return ports;
+            return refnets;
         }
 
-        private static void AddPort(List<Vec2> ports, Matrix3d transform, double x, double y)
+        private static Vec2 Port(Matrix3d transform, double x, double y)
         {
             Point3d point = new Point3d(x, y, 0).TransformBy(transform);
-            ports.Add(new Vec2(point.X, point.Y));
+            return new Vec2(point.X, point.Y);
         }
 
         /// <summary>
@@ -194,7 +239,7 @@ namespace HvacAiCadAddin.Pipes
         }
 
         // Order matters: AppendEntity and AddNewlyCreatedDBObject first, then the attributes.
-        private static void InsertRefnet(
+        internal static void InsertRefnet(
             Transaction transaction, BlockTableRecord space, ObjectId definitionId, RefnetPlacement refnet)
         {
             BlockReference block = new BlockReference(
