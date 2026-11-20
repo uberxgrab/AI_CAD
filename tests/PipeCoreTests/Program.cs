@@ -36,6 +36,7 @@ namespace PipeCoreTests
                     SplitPlanTests.Run();
                     RefrigCleanTests.Run();
                     RefnetTests.Run();
+                    ControlWireTests.Run();
 
                     Console.WriteLine("-- {0}: {1} passed, {2} failed", culture,
                         Check.Passed - passedBefore, Check.Failed - failedBefore);
