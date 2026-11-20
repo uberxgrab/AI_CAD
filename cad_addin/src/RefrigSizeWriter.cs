@@ -227,7 +227,7 @@ namespace HvacAiCadAddin.Pipes
             target.SetPropertiesFrom(original);
         }
 
-        private static ResultBuffer UnitXData(int index, double kw)
+        internal static ResultBuffer UnitXData(int index, double kw)
         {
             return new ResultBuffer(
                 new TypedValue((int)DxfCode.ExtendedDataRegAppName, RefrigCapacityReader.UnitApp),
@@ -236,7 +236,7 @@ namespace HvacAiCadAddin.Pipes
                 new TypedValue((int)DxfCode.ExtendedDataReal, kw));
         }
 
-        private static void EnsureRegApp(Transaction transaction, Database db, string name)
+        internal static void EnsureRegApp(Transaction transaction, Database db, string name)
         {
             RegAppTable table = (RegAppTable)transaction.GetObject(db.RegAppTableId, OpenMode.ForRead);
             if (table.Has(name))
@@ -290,12 +290,13 @@ namespace HvacAiCadAddin.Pipes
         }
 
         // Removes the size labels an earlier run wrote near this network, so a second run replaces them.
-        private static void RemoveOldLabels(
+        internal static void RemoveOldLabels(
             Transaction transaction,
             BlockTableRecord space,
             List<IList<Vec2>> geometry,
             double radius,
-            WriteSummary summary)
+            WriteSummary summary,
+            string app = LabelApp)
         {
             Database db = space.Database;
             foreach (ObjectId id in space)
@@ -307,7 +308,7 @@ namespace HvacAiCadAddin.Pipes
                 if (text == null || text.IsErased)
                     continue;
 
-                using (ResultBuffer tag = text.GetXDataForApplication(LabelApp))
+                using (ResultBuffer tag = text.GetXDataForApplication(app))
                 {
                     if (tag == null)
                         continue;
@@ -339,18 +340,20 @@ namespace HvacAiCadAddin.Pipes
             }
         }
 
-        private static void AddLabel(
+        internal static void AddLabel(
             Transaction transaction,
             Database db,
             BlockTableRecord space,
             SizeLabelPlacement placement,
             double elevation,
-            SizedWriteOptions options)
+            SizedWriteOptions options,
+            string app = LabelApp,
+            string layer = null)
         {
             Point3d at = new Point3d(placement.Position.X, placement.Position.Y, elevation);
             DBText text = new DBText();
             text.SetDatabaseDefaults(db);
-            text.Layer = options.LabelLayer;
+            text.Layer = layer ?? options.LabelLayer;
             if (!options.LabelStyle.IsNull)
                 text.TextStyleId = options.LabelStyle;
             text.Height = options.LabelHeight;
@@ -361,7 +364,7 @@ namespace HvacAiCadAddin.Pipes
             text.VerticalMode = TextVerticalMode.TextVerticalMid;
             text.AlignmentPoint = at;
             using (ResultBuffer buffer = new ResultBuffer(
-                new TypedValue((int)DxfCode.ExtendedDataRegAppName, LabelApp),
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, app),
                 new TypedValue((int)DxfCode.ExtendedDataAsciiString, "SIZE")))
             {
                 text.XData = buffer;

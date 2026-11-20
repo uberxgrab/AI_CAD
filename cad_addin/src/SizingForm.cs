@@ -101,6 +101,10 @@ namespace HvacAiCadAddin.Commands
         /// <summary>The capacities the unit cells offer; null makes the cell a number box.</summary>
         public IList<SizingCapacityChoice> CapacityChoices;
         public string SegmentsTitle = "Pipe segments";
+        /// <summary>The headers of the segment grid's second and third columns, and the width of the third (0 keeps the default).</summary>
+        public string KindTitle = "Kind";
+        public string TotalTitle = "Total";
+        public int TotalWidth;
         /// <summary>The sizes the segment cells offer.</summary>
         public IList<string> SizeChoices = new List<string>();
         public Func<SizingRequestView, SizingState> Recompute;
@@ -393,8 +397,8 @@ namespace HvacAiCadAddin.Commands
             right.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             _segmentGrid.Columns.Add(TextColumn("#", 46, true));
-            _segmentGrid.Columns.Add(TextColumn("Kind", 110, true));
-            _segmentGrid.Columns.Add(TextColumn("Total", 54, true));
+            _segmentGrid.Columns.Add(TextColumn(_setup.KindTitle ?? "Kind", 110, true));
+            _segmentGrid.Columns.Add(TextColumn(_setup.TotalTitle ?? "Total", _setup.TotalWidth > 0 ? _setup.TotalWidth : 54, true));
             _segmentGrid.Columns.Add(TextColumn("Units", 46, true));
             _segmentGrid.Columns.Add(TextColumn("Auto size", 150, true));
             DataGridViewComboBoxColumn size = new DataGridViewComboBoxColumn
