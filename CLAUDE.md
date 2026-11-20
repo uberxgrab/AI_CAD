@@ -39,6 +39,8 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
   - `src/`: all AutoCAD API calls and CAD UI.
   - `python_bridge.py`: read-only add-in and AutoCAD discovery helper.
   - `start.scr`: `NETLOAD` script used when debugging.
+- `docs/SESSION_HANDOFF.md`: summary of past Claude sessions, user decisions, work
+  in progress, and setup on a new machine. Read it when resuming work.
 - `.claude/agents/research.md`: read-only `research` subagent for AutoCAD .NET API,
   HVAC reference, and ezdxf questions. It treats this file as authoritative.
 
