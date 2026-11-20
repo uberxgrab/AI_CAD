@@ -758,6 +758,142 @@ corner with R = W/2. If it is still too short, refuse the point and say why.
      gave it most of its length.
    - The preview colours are fixed per catalogue size and are not a layer colour.
 
+### `HVACDRAIN`: draw and size a condensate network
+
+The user approved the plan on 2026-11-20. The user draws a rough condensate network of LINEs and
+polylines from the indoor units to the drain point; the command straightens it, draws 45 degree
+joints, sizes each pipe from the indoor-unit capacities and writes it on the `EIA_1 Pipe condensated
+DN<n>` layers with a size label. Flow runs toward the root (the drain point). Needs in-AutoCAD
+acceptance testing.
+
+1. **Select** the pickfirst set, or a new selection of `LINE,LWPOLYLINE`, then pick the drain end
+   (the end of the pipe that reaches the riser or floor drain) as the root. A curve on a locked layer
+   is refused.
+2. **Settings** (`DrainSettingsForm`, remembered in `%APPDATA%\HvacAiCadAddin\HVACDRAIN.settings`):
+
+   | Setting | Default |
+   | --- | --- |
+   | Weld tolerance, angle tolerance, align tolerance, jog tolerance | 50 mm, 10 degrees, 200 mm, 200 mm (the cleaner's) |
+   | Base angle | UCS X |
+   | Slant length (the 45 degree piece; the cut is its cos 45 part, 212.13 mm) | 300 mm |
+   | Size pipes | on |
+   | Condensate factor | 0.71 L/h per kW |
+   | Slope | 1/100 (or 1/50) |
+   | Capacity search radius from a pipe end | 1500 mm |
+   | Write size labels | on |
+   | Label height (also the distance of the label from the pipe) | 150 mm |
+   | Label format (`{size}`, `{slope}` in percent) | `D{size}-{slope}%`, for example `D34-1%` |
+   | Label layer (blank: each pipe's own size layer) | `EIA_1 GAS ANNOTATIONS` |
+
+3. **Clean.** `RefrigCleaner.Run` with no root point (`DrainPlanCore.cs`): the same weld, T-split,
+   orthogonalise, jog and collinear steps and the same checks as `HVACREFRIG`. With no root there are
+   no refnets and none of the R1, R2, R3 rules. Pipe ends never move.
+4. **Tree** (`DrainNetworkCore.cs`). Built from the cleaned paths, flowing toward the root. Key nodes:
+   the root (it must be a pipe end), the indoor units (the other degree-1 ends), the T junctions
+   (degree 3) and the crosses (degree 4 or more). A segment is the pipe between two key nodes, with
+   its bends as interior points and collinear points dropped, from the upstream node to the
+   downstream node. Segments are numbered `S1`, `S2`, ... from the root so that a segment has a smaller
+   number than the segments that flow into it; units are `E1`, `E2`, ... in the order met. Each
+   segment lists the units upstream of it. Pipes of another network are kept as cleaned and not sized,
+   with a warning. A loop is refused.
+5. **45 degree joints** (`DrainGeometryCore.cs`). With cut = slant length x cos 45:
+   - A 90 degree bend (within 5 degrees) is chamfered: the corner is cut by the cut distance on each
+     leg and a 45 degree piece of the slant length joins the cuts.
+   - A right-angle T (the pipe toward the root and one upstream pipe in line, the other upstream pipe
+     the branch) keeps its main straight. The branch stops one cut distance short of the main's
+     centreline and a slant of the slant length runs to the main, landing one cut distance
+     DOWNSTREAM (toward the root) of the original T point. The slant belongs to the branch (its size,
+     its layer); the main's upstream pipe is extended to the landing point and the pipe toward the
+     root starts there.
+   - Two upstream pipes in line that meet a downstream pipe at right angles (a T whose stem is the
+     pipe toward the root) both get a slant and meet on the stem one cut distance downstream of the
+     joint (a Y). The user did not describe this case; this is the code's choice.
+   - A leg that cannot take the cuts it is given (its two cuts add up to more than its length,
+     counting the chamfer or slant of the neighbouring corner on the same leg, or the landing would
+     pass the next node) keeps the original corner or T. When a leg is too short for two features,
+     the one at its upstream end gives way and the other is made. Each kept joint is circled and
+     reported with the leg's length and the length it needed.
+   - A bend that is not a right angle is left. A T that is not at right angles is left and reported,
+     unless it already leaves at 45 degrees (a Y), so running the command again on its own result
+     changes nothing. A joint of four or more pipes is not handled: it stays a plain cross and is
+     reported.
+6. **Sizing** (`DrainSizingCore.cs`, Daikin Si39 basis). An indoor unit drains 2 L/h per HP and 1 HP
+   class is 2.8 kW, so 0.71 L/h per kW. The sizes are the catalogue's condensate sizes (D21, D27, D34,
+   D48, D60, D90, D110) and map to `EIA_1 Pipe condensated DN<n>` through `PipeCatalog.LayerName`.
+
+   | Pipe | Daikin allowable flow, 1/100 | 1/50 | Largest total kW, 1/100 | 1/50 |
+   | --- | --- | --- | --- | --- |
+   | one indoor unit | | | D27, any capacity | |
+   | D34 (VP30) | 88 L/h | 125 L/h | 120 | 175 |
+   | D48 (VP40) | 175 L/h | 247 L/h | 245 | 346 |
+   | D60 (VP50) | 334 L/h | 473 L/h | 465 | 662 |
+   | D90 | none (*unconfirmed*) | none | 900 | 1280 (scaled by 662 / 465) |
+   | D110 | none (*unconfirmed*) | none | above 900 | above 1280 |
+
+   - **Rules.** A pipe that drains exactly one unit is D27. Otherwise the size is the first band
+     whose largest total kW covers the pipe's total. A pipe is never smaller than any pipe that flows
+     into it: its automatic size is the larger of its own table size and the sizes in use of those
+     pipes (a size set by hand counts).
+   - **Other factor.** The table limits are for 0.71 L/h per kW. Another factor scales them by
+     0.71 / factor (more litres per kW, lower limits).
+   - **Unconfirmed.** The D90 and D110 limits are extrapolated and are flagged in the dialog
+     (the row warns, a note explains). D21 is never chosen automatically. The limits are the user's
+     figures: the allowable flows over 0.714 L/h per kW (2 L/h per 2.8 kW) give 123, 245 and 468 kW
+     at 1/100, which the user rounded down to 120, 245 and 465, and 175, 346 and 662 kW at 1/50.
+   - **Sources.** Daikin REYQ service manual Si39-406:
+     https://manualshive.com/en/manual/daikin/reyq96mtju/4175824?page=51 ; VRV II Si39-303:
+     https://manualshive.com/en/manual/daikin/vrv-ii-series/2459187?page=46 ; FXFQ drain pipe VP25:
+     https://manualshive.com/en/manual/daikin/fxfq100bveb/2459709?page=28 . IPC/IMC 314.2.2 was named
+     by the user for comparison; it was not read for this implementation.
+7. **Capacity prefill,** per unit (`RefrigCapacityReader.cs`, shared with `HVACREFRIG`): xdata
+   `HVACAI_UNIT` on the pipe curve that ends at the unit (kW from its real value), a block whose
+   extents grown by the weld tolerance contain the pipe end and whose name has `<number> kW`
+   (`FCU-CAS-2.8 kW`), the nearest `HVAC-NAME OF EQUIPMENTS` block within the capacity search radius
+   whose `PROPERTIES` attribute has `<number> kW` (its `TITLE`, for example `FCU-1.1.1`, is the source
+   name), or empty. On Apply the capacity of each unit is written back as `HVACAI_UNIT` xdata (the
+   nearest Daikin capacity index, then the kW) on the pipe that ends there, so a later run reads it.
+8. **Dialog** (`DrainSizingUi.cs` over the shared `SizingForm`, in kW mode: the capacity cells are
+   numbers). Left grid "Indoor units": `#`, source, capacity in kW, with "Apply to selected rows".
+   Right grid "Pipe segments": `#`, flow in L/h, total kW, units, automatic size, size (a combo of D21
+   to D110), a pen mark for a size set by hand (kept when anything else changes), and the warning
+   (for example `smaller than upstream D34`). Below: the warnings (kept joints, crosses, other
+   networks, missing capacities), Recalculate, Apply and Cancel. Everything recomputes live. Apply is
+   disabled while a unit has no capacity. Before the dialog shows, transient graphics draw the
+   straightened pipes with their chamfers and slants coloured by size, `E1`, ... at the pipe ends,
+   `S1`, ... at the segment label spots, the drain point circled in red and the reported cases
+   circled in yellow; selecting a row highlights its unit or segment in white. *Not tested:* whether
+   AutoCAD repaints transients while the modal dialog is open; if it does not, the preview drawn when
+   the dialog opened still shows. With "Size pipes" off there is no dialog: the same preview in green
+   and a Yes/No question like `HVACREFRIG`, and the pipes keep their layers.
+9. **Apply** (`DrainWriter.cs`), one transaction, one undo group: one polyline per segment on its size
+   layer (colour, linetype and lineweight ByLayer, the rest copied from the source curve that gave the
+   segment most of its length, elevation kept), pipes of other networks as cleaned, the originals
+   erased, the capacity xdata, and the labels. Missing size layers are imported from the template with
+   `PipeDrawingLibrary.EnsureLayer`, which also brings the layer's linetype (`Broken Line`). Cancel
+   writes nothing.
+10. **Size labels.** A TEXT `D<size>-<slope>%` (for example `D34-1%`) at the midpoint of the segment's
+    longest straight piece, offset by the label height to the left of its reading direction, rotated
+    along the piece and readable in (-90, 90] degrees (the shared `SizeLabels.TryPlace`), on the label
+    layer setting (default `EIA_1 GAS ANNOTATIONS`, imported from the template when missing, the layer
+    `HVACREFRIG` uses for its labels; no condensate annotation layer is documented, so check this
+    choice) in style `T_unicode` when the drawing has it. Each label carries xdata `HVACAI_DRAINLABEL`;
+    a later run removes labels with that tag within 4 label heights (at least 600 mm) of the network
+    and writes new ones.
+11. **Choices the code made** (for review):
+    - The cleaner's tolerances are in the settings dialog; its refnet settings are not used.
+    - The Y case above, and giving way at the upstream end of a short leg.
+    - D90 and D110 limits, and the 1/50 limit of D90, are extrapolated.
+    - Other networks in the selection are kept as cleaned (as `HVACREFRIG` does) rather than refused.
+    - Files: `HvacDrain.cs` (command), `DrainSettingsCore.cs`, `DrainNetworkCore.cs`,
+      `DrainGeometryCore.cs`, `DrainSizingCore.cs`, `DrainPlanCore.cs` (AutoCAD-free; tested by
+      `tests/PipeCoreTests/DrainTests.cs`), `DrainWriter.cs`, `DrainSizingUi.cs`,
+      `DrainSettingsForm.cs`. It reuses `RefrigCleaner`, `RefrigCapacityReader`, `SizingForm`,
+      `SizeLabels`, `PipeTransients` and the label and xdata helpers of `RefrigSizeWriter`
+      (`SizingForm` gained column header settings and `RefrigSizeWriter` an app and layer parameter on
+      its label helpers; `HVACREFRIG` behaves as before). `NetworkTopologyCore` was not reused: its
+      upstream and downstream run the other way (from the outdoor unit), it treats every junction
+      as a refnet and it has no cross or collinear handling.
+
 ### Pipe stream: implementation notes (`HVACPIPESIZE`, `HVACREFRIG`)
 
 Files, all under `cad_addin/src/`. The core is AutoCAD-free (namespace
@@ -772,9 +908,11 @@ Files, all under `cad_addin/src/`. The core is AutoCAD-free (namespace
 | `RefrigSizingCore.cs` | Daikin VRV IV tables, sizing of the tree, warnings, capacity text parsing, label placement. |
 | `PipeDrawingLibrary.cs`, `RefrigWriter.cs`, `RefrigSizeWriter.cs`, `RefrigCapacityReader.cs` | Non-interactive AutoCAD code: read curves and capacities, layers, split, write (cleaned, or cleaned and sized). |
 | `HvacPipeSize.cs`, `HvacRefrig.cs`, `RefrigSizingUi.cs`, `PipeSizeForm.cs`, `RefrigSettingsForm.cs`, `SizingForm.cs`, `PipeTransients.cs` | Commands, dialogs (`SizingForm` is generic), transient graphics. |
+| `DrainSettingsCore.cs`, `DrainNetworkCore.cs`, `DrainGeometryCore.cs`, `DrainSizingCore.cs`, `DrainPlanCore.cs` | `HVACDRAIN` cores: settings, tree toward the drain point, 45 degree joints, Daikin Si39 sizing, the cleaning pipeline. |
+| `HvacDrain.cs`, `DrainWriter.cs`, `DrainSizingUi.cs`, `DrainSettingsForm.cs` | `HVACDRAIN` command, writer, sizing session over `SizingForm`, settings dialog. |
 
-Settings live in `%APPDATA%\HvacAiCadAddin\HVACPIPESIZE.settings` and
-`HVACREFRIG.settings`.
+Settings live in `%APPDATA%\HvacAiCadAddin\HVACPIPESIZE.settings`,
+`HVACREFRIG.settings` and `HVACDRAIN.settings`.
 
 Where the spec left a choice, the code does this (all conservative):
 
@@ -817,7 +955,7 @@ Where the spec left a choice, the code does this (all conservative):
   polylines, arcs), orthogonalisation (the cluster span cap, anchors, validation
   failures) and refnet placement (mirroring, short-leg reports). Run every check
   under en-US, vi-VN and tr-TR.
-- **Pipe core tests:** `tests/PipeCoreTests` (about 1750 checks per culture) cover the
+- **Pipe core tests:** `tests/PipeCoreTests` (about 2200 checks per culture) cover the
   above for the pipe stream; run them with `dotnet run --project tests\PipeCoreTests\PipeCoreTests.csproj -c Debug`.
   `tests/PipeAcadTests` is not written yet.
 - **Headless tests:** an `accoreconsole` test project per stream
