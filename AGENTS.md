@@ -533,6 +533,10 @@ corner with R = W/2. If it is still too short, refuse the point and say why.
    | R2: min straight pipe from an outlet to the next bend or refnet inlet | 500 |
    | R3: max pipe from the first refnet inlet to the farthest indoor unit | 40000 |
    | R3: construction allowance (warn above max - allowance, 37 m) | 3000 |
+   | Size pipes (step 6) | On |
+   | Write size labels | On |
+   | Label height (mm; the label's side offset equals it, so it scales with it) | 150 |
+   | Capacity search radius for equipment labels (mm) | 1500 |
    | Base angle | UCS X |
 
 3. **Clean the geometry,** in the core and in this fixed order:
@@ -609,8 +613,150 @@ corner with R = W/2. If it is still too short, refuse the point and say why.
      - degree 4 or more;
      - an existing `Branch Connection (1)` at N;
      - the D-long branch pipe cannot clear another pipe even at the least D.
-6. **No sizing.** The command does not size pipes. Use `HVACPIPESIZE` with the
-   `RP` layers.
+6. **Pipe sizing** (user request 2026-11-20, "Size pipes" on by default). After the cleaning the
+   command sizes the refrigerant pipes for a Daikin VRV IV heat pump (RXYQ-T/U). It goes on even
+   when the network is already clean. `HVACPIPESIZE` still sizes a single run by hand.
+
+   **Flow.**
+   1. **Tree.** `NetworkTopologyCore.cs` builds the pipe tree from the root. A refnet, planned or
+      already in the drawing, is one node that joins its inlet, main outlet and branch outlet.
+      A pipe drawn through a refnet body is left as drawn. A junction with no refnet (a case the
+      cleaning reported) is a node of its own and is sized like a refnet, with a warning.
+      - *Segments* are the pipes between nodes, one polyline each from upstream to downstream, with
+        the pieces of a path merged and a path cut where it passes a refnet port. Kinds: `Main`
+        (root to the first refnet, or to the only unit), `BetweenRefnets`, `ToUnit` (last refnet to
+        an indoor unit).
+      - *Units* are the pipe ends other than the root (`E1`, `E2`, ...). Each segment lists the units
+        downstream of it. Segments are numbered `S1`, `S2`, ... in the order met from the root,
+        main outlet before branch outlet.
+      - Pipes not connected to the root are written as they were.
+   2. **Capacity prefill,** per unit, first match wins (`RefrigCapacityReader.cs`):
+      1. xdata `HVACAI_UNIT` (1071 index, 1040 kW) that an earlier run stored on the pipe curve
+         that ends at the unit;
+      2. a block whose extents, grown by the weld tolerance, contain the pipe end and whose name has
+         `<number> kW` (`FCU-CAS-2.8 kW`, `IU-5.6 kW`; the dynamic block's true name is used);
+      3. the nearest `HVAC-NAME OF EQUIPMENTS` block within the capacity search radius (default
+         1500 mm) whose attribute `PROPERTIES` has `<number> kW`; its `TITLE` (for example
+         `FCU-1.1.1`) is shown as the source name. A label serves one unit, nearest pair first;
+      4. empty. The user must fill it before Apply.
+
+      A kW value maps to the nearest index. Where the value is not within 6 percent of a nominal
+      capacity the source column says "nearest index".
+   3. **Dialog** (`SizingForm.cs`, WinForms, generic so a condensate command can reuse it: the caller
+      passes the unit rows, the capacity and size choices, and a recompute callback).
+      - Header: outdoor unit HP (`Auto` or 4 to 54), the indoor total, the connection ratio, the
+        longest pipe from the root (actual length, and with 0.5 m per refnet), and the check box
+        "Upsize main pipe (equivalent length >= 90 m)", off by default.
+      - Left grid "Indoor units": `#`, source (block, label, xdata or empty), capacity (combo such
+        as `25 · 2.8 kW`). Several rows can be selected and set at once with "Apply to selected rows".
+      - Right grid "Pipe segments": `#`, kind, total index, units, automatic size, size (combo of the
+        catalogue's RP sizes), a pen mark when the size was set by hand, and the warning. Sizes set by
+        hand are kept when anything else changes; choosing the automatic size clears the mark, and
+        "Clear sizes set by hand" clears them all. A line lists the refnet kits.
+      - Warnings and notes box, then Recalculate, Apply and Cancel. Everything recomputes live.
+        Apply is disabled while a unit has no capacity or a segment has no size.
+      - **Preview.** Before the dialog shows, transient graphics mark `E1`, `E2`, ... at the pipe ends
+        and `S1`, `S2`, ... at the segment midpoints, the segments coloured by size, refnet bodies in
+        magenta and the cases the checks circled in yellow. Selecting a row highlights its segment or
+        unit and redraws the preview. *Not tested:* whether AutoCAD repaints transients while the
+        modal dialog is open; if it does not, the preview drawn at the start still shows.
+   4. **Apply** writes, in the same transaction as the cleaned network: each segment's polyline on its
+      RP layer (colour, linetype and lineweight ByLayer; missing layers imported from the template
+      as `HVACPIPESIZE` does); each new refnet, and each refnet block already in the drawing, on its
+      inlet pipe's layer (a block on a locked layer is left alone); the `HVACAI_UNIT` xdata on the
+      pipe that ends at each unit; and the size labels. **Cancel** writes nothing. One command is one
+      undo group.
+   5. **Size labels** (option "Write size labels", default on). A TEXT `%%C<gas>/<liquid>` (for
+      example `%%C15.9/9.5`) on layer `EIA_1 GAS ANNOTATIONS` (imported from the template when
+      missing), style `T_unicode` when the drawing has it, otherwise the current style. Height is
+      the setting "Label height" (default 150 mm, above 0). The text is centred on a point offset
+      from the midpoint of the segment's longest straight piece by the same distance as the height,
+      to the left of its reading direction, and rotated along the piece, kept readable in
+      (-90, 90] degrees. Each label carries xdata `HVACAI_RPLABEL`; a later run removes labels
+      with that tag within 600 mm of the network and writes new ones (labels on a locked layer are
+      left in place).
+
+   **Tables** (`RefrigSizingCore.cs`). Sizes are gas/liquid outer diameters in mm. A pair is mapped
+   to the template layer by its gas and liquid sizes; the bracket on the layer name is the
+   outdoor unit kW range and is part of the name. Every standard pair below exists in the template.
+   Cells marked *unconfirmed* were not found in the sources; check them against the Daikin data book.
+
+   | Index | 15 | 20 | 25 | 32 | 40 | 50 | 63 | 71 | 80 | 100 | 125 | 140 | 200 | 250 |
+   | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+   | kW | 1.7 (unconfirmed) | 2.2 | 2.8 | 3.6 | 4.5 | 5.6 | 7.1 | 8.0 (unconfirmed) | 9.0 | 11.2 | 14.0 | 16.0 (unconfirmed) | 22.4 | 28.0 |
+
+   | Refnet to unit, by the unit's index | Gas/liquid |
+   | --- | --- |
+   | 15 to 50 | 12.7/6.4 |
+   | 63 to 140 | 15.9/9.5 |
+   | 200 | 19.1/9.5 |
+   | 250 | 22.2/9.5 |
+
+   | Refnet to refnet, by the total index downstream | Gas/liquid |
+   | --- | --- |
+   | below 150 | 15.9/9.5 |
+   | 150 to below 200 | 19.1/9.5 |
+   | 200 to below 290 | 22.2/9.5 |
+   | 290 to below 420 | 28.6/12.7 |
+   | 420 to below 640 | 28.6/15.9 |
+   | 640 to below 920 | 34.9/19.1 |
+   | 920 and over | 41.3/19.1 (liquid unconfirmed) |
+
+   A pipe between refnets is never larger than the standard main pipe: gas and liquid are each capped.
+
+   | Main (outdoor unit to the first refnet, or to the only unit), by outdoor HP | Gas/liquid |
+   | --- | --- |
+   | 5 | 15.9/9.5 |
+   | 6 | 19.1/9.5 (unconfirmed) |
+   | 8 | 19.1/9.5 |
+   | 10 | 22.2/9.5 |
+   | 12 to 16 | 28.6/12.7 |
+   | 18 to 22 | 28.6/15.9 |
+   | 24 | 34.9/15.9 |
+   | 26 to 34 | 34.9/19.1 |
+   | 36 to 54 | 41.3/19.1 |
+
+   4 HP is not in the table and is taken as 5 HP (unconfirmed). HP choices are 4, 5, 6, 8, 10, 12,
+   14, ... 54. The outdoor unit's index is HP x 25 (unconfirmed above 8 HP, where 8 HP is 200).
+
+   - **Default HP** is the smallest HP whose index is at least the indoor total (the largest HP when
+     none is); the user can change it. The **connection ratio** is the indoor total over the outdoor
+     index; a ratio outside 50 to 130 percent warns.
+   - **Upsizing the main pipe** (optional, equivalent length of 90 m or more). One step on the liquid
+     side (6.4, 9.5, 12.7, 15.9, 19.1, 22.2) and on the gas side (9.5, 12.7, 15.9, 19.1, 22.2, then
+     25.4, 28.6 then 31.8, 34.9 then 38.1; 41.3 has no step). There is no gas step for 18 to 22 HP,
+     where the sources conflict. The sizes 25.4, 31.8 and 38.1 are not in the template, and neither
+     are most upsized pairs, so the command tries the full step, then the liquid step alone, then the
+     gas step alone, and uses the first pair the template has a layer for. Otherwise it keeps the
+     standard size. A warning says what was done. With the template's layers only these upsize:
+     4, 5, 6 and 8 HP (gas only), 12 to 16 HP and 24 HP (liquid only).
+   - **Refnet kits** (information, shown in the dialog, nothing is drawn). The first refnet after the
+     outdoor unit, by HP: 4 to 6 `KHRQ22M20T`, 8 and 10 `KHRQ22M29T9`, 12 to 22 `KHRQ22M64T`, 24 to
+     54 `KHRQ22M75T`. A later refnet, by the total index downstream: below 200 `KHRQ22M20T`, 200 to
+     below 290 `KHRQ22M29T9`, 290 to below 640 `KHRQ22M64T`, 640 and over `KHRQ22M75T`.
+   - **Warnings.** A unit with no capacity (this blocks Apply). A pipe between refnets larger than the
+     main pipe (possible after a manual change). A pipe to a unit that is not the unit's connection
+     size. A connection ratio outside 50 to 130 percent. The refnet rules R1 to R3 and the
+     junction cases from the cleaning appear in the same box. Table cells in use that are
+     unconfirmed are listed as notes.
+
+   **Sources** (Daikin):
+   - RXYQ-T installer reference guide:
+     https://www.daikin.fr/content/dam/document-library/Installer-reference-guide/ac/vrv/RYYQ-T,%20RYMQ-T,%20RXYQ-T,%20RXYQ-T9_4PEN370475-1B_Installer%20and%20user%20reference%20guide_English.pdf
+   - RXYTQ-TYF installer reference guide:
+     https://www.daikinoman.com/content/dam/document-library/Installer-reference-guide/ac/vrv/rxytq-tyf/RXYTQ-TYF_4PEN388989-1B_Installer%20and%20user%20reference%20guide_English.pdf
+   - RYYQ-T / RXYQ-T refrigerant pipe selection:
+     https://www.daikin.es/content/dam/MDM/TechnicalDrawings/VRV/EN/RYYQ-T_RXYQ-T_RYMQ-T_refpipsel_4P329765-1C_2_EN.pdf
+   - RXYQ-U refrigerant pipe selection:
+     https://www.daikin.es/content/dam/MDM/TechnicalDrawings/VRV/RXYQ-U/en/RXYQ-U_refpipsel_3D079540F_1_EN.pdf
+
+   **Choices the code made** where the request left room (for review):
+   - A refnet block already in the drawing is moved onto its inlet pipe's layer too.
+   - When the network is already clean, Apply still rewrites every pipe as a new polyline (handles
+     change, other properties are copied from the source curve), like a cleaning run does.
+   - A segment polyline replaces the paths it merges; its properties come from the source curve that
+     gave it most of its length.
+   - The preview colours are fixed per catalogue size and are not a layer colour.
 
 ### Pipe stream: implementation notes (`HVACPIPESIZE`, `HVACREFRIG`)
 
@@ -622,8 +768,10 @@ Files, all under `cad_addin/src/`. The core is AutoCAD-free (namespace
 | `PipeCatalogCore.cs`, `PipeSettingsCore.cs` | Layer catalogue, colours, pipe-layer name filter, remembered dialog values. |
 | `PipeNetworkCore.cs` | Welded graph with T nodes, run finder, cut plan (`CurveSplitPlan`). |
 | `RefrigCleanerCore.cs` | Cleaning order, validation, refnet placement, output paths. |
-| `PipeDrawingLibrary.cs`, `RefrigWriter.cs` | Non-interactive AutoCAD code: read curves, layers, split, write. |
-| `HvacPipeSize.cs`, `HvacRefrig.cs`, `PipeSizeForm.cs`, `RefrigSettingsForm.cs`, `PipeTransients.cs` | Commands, dialogs, transient graphics. |
+| `NetworkTopologyCore.cs` | Pipe tree from the root through new and existing refnets: segments, units, downstream units. |
+| `RefrigSizingCore.cs` | Daikin VRV IV tables, sizing of the tree, warnings, capacity text parsing, label placement. |
+| `PipeDrawingLibrary.cs`, `RefrigWriter.cs`, `RefrigSizeWriter.cs`, `RefrigCapacityReader.cs` | Non-interactive AutoCAD code: read curves and capacities, layers, split, write (cleaned, or cleaned and sized). |
+| `HvacPipeSize.cs`, `HvacRefrig.cs`, `RefrigSizingUi.cs`, `PipeSizeForm.cs`, `RefrigSettingsForm.cs`, `SizingForm.cs`, `PipeTransients.cs` | Commands, dialogs (`SizingForm` is generic), transient graphics. |
 
 Settings live in `%APPDATA%\HvacAiCadAddin\HVACPIPESIZE.settings` and
 `HVACREFRIG.settings`.
@@ -649,7 +797,8 @@ Where the spec left a choice, the code does this (all conservative):
   Pipes drawn twice over the same two joints are kept once.
 - **Writing:** the cleaned network is written as one polyline per run between junctions
   (layer from the run, other properties copied from the source curve that gave most length),
-  the originals are erased, and refnets are inserted, all in one transaction.
+  the originals are erased, and refnets are inserted, all in one transaction. With sizing on,
+  `RefrigSizeWriter` writes one polyline per segment instead (step 6).
 - **Refnet cases reported and left unchanged**, besides the spec's: a branch that does not
   leave the main at right angles (within the angle tolerance), and networks with no root.
   The upstream-run check counts the run left after an earlier refnet's turn on a branch, and
@@ -668,7 +817,7 @@ Where the spec left a choice, the code does this (all conservative):
   polylines, arcs), orthogonalisation (the cluster span cap, anchors, validation
   failures) and refnet placement (mirroring, short-leg reports). Run every check
   under en-US, vi-VN and tr-TR.
-- **Pipe core tests:** `tests/PipeCoreTests` (about 1170 checks per culture) cover the
+- **Pipe core tests:** `tests/PipeCoreTests` (about 1750 checks per culture) cover the
   above for the pipe stream; run them with `dotnet run --project tests\PipeCoreTests\PipeCoreTests.csproj -c Debug`.
   `tests/PipeAcadTests` is not written yet.
 - **Headless tests:** an `accoreconsole` test project per stream

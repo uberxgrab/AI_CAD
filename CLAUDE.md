@@ -25,7 +25,7 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
   - `tests/HvacQtoCoreTests/`: C# console tests for `HVACQTO` core logic. Keep this
     outside `cad_addin/`, whose SDK glob would compile it into the add-in.
   - `tests/PipeCoreTests/`: C# console tests for the AutoCAD-free pipe core
-    (`HVACPIPESIZE` run finding and `HVACREFRIG` cleaning). Same rule: outside `cad_addin/`.
+    (`HVACPIPESIZE` run finding and `HVACREFRIG` cleaning, pipe tree and sizing). Same rule: outside `cad_addin/`.
 - `CAD/`: representative CAD inputs. Explicitly named root fixtures such as
   `test.dxf` are also allowed.
   - `CAD/MEP_DWT_3.dwg`: the user's template drawing. It holds their duct blocks,
@@ -92,7 +92,7 @@ parser.load_dxf -> extract_entities      RawEntity
 | `HVACCOUNT` | `cad_addin/src/TQO.cs` | Totals `Line` and `Polyline` lengths on layers that start with `!` and contain `x` (case-insensitive). |
 | `FIRSTMESSAGE` | `cad_addin/src/Message.cs` | Writes a hello message to the command line. |
 | `HVACPIPESIZE` | `cad_addin/src/HvacPipeSize.cs`, `PipeDrawingLibrary.cs`, `PipeSizeForm.cs` | Pick a LINE/LWPOLYLINE; finds the pipe run (corners pass, T nodes and layer changes stop it), highlights it, and moves it to the chosen type and size layer by cutting curves with `GetSplitCurves`. Needs in-AutoCAD acceptance testing. |
-| `HVACREFRIG` | `cad_addin/src/HvacRefrig.cs`, `RefrigWriter.cs`, `RefrigSettingsForm.cs` | Cleans a rough refrigerant LINE/LWPOLYLINE network (weld, orthogonalise, collapse jogs, merge collinear nodes; pipe ends never move), previews it, and inserts `Branch Connection (1)` refnets. Does not size pipes. Needs in-AutoCAD acceptance testing. |
+| `HVACREFRIG` | `cad_addin/src/HvacRefrig.cs`, `RefrigWriter.cs`, `RefrigSettingsForm.cs`, `NetworkTopologyCore.cs`, `RefrigSizingCore.cs`, `RefrigCapacityReader.cs`, `RefrigSizeWriter.cs`, `RefrigSizingUi.cs`, `SizingForm.cs` | Cleans a rough refrigerant LINE/LWPOLYLINE network (weld, orthogonalise, collapse jogs, merge collinear nodes; pipe ends never move), previews it, and inserts `Branch Connection (1)` refnets. With "Size pipes" on (default) it then sizes the pipes by the Daikin VRV IV tables: it reads each indoor unit's capacity (xdata of an earlier run, a block name with `x kW`, or an `HVAC-NAME OF EQUIPMENTS` label), shows `SizingForm`, and on Apply puts each segment on its `EIA_1 RP` layer, stores the capacity xdata and writes `%%C<gas>/<liquid>` labels (text height is a setting, default 150 mm). Cancel in the dialog writes nothing. Needs in-AutoCAD acceptance testing. |
 
 `HVACQTO` classification:
 
