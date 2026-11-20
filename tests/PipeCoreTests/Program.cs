@@ -39,6 +39,7 @@ namespace PipeCoreTests
                     TopologyTests.Run();
                     SizingTests.Run();
                     DrainTests.Run();
+                    PowerWireTests.Run();
 
                     Console.WriteLine("-- {0}: {1} passed, {2} failed", culture,
                         Check.Passed - passedBefore, Check.Failed - failedBefore);

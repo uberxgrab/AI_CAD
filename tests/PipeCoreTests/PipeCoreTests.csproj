@@ -39,6 +39,7 @@
     <Compile Include="..\..\cad_addin\src\DrainGeometryCore.cs" Link="DrainGeometryCore.cs" />
     <Compile Include="..\..\cad_addin\src\DrainSizingCore.cs" Link="DrainSizingCore.cs" />
     <Compile Include="..\..\cad_addin\src\DrainPlanCore.cs" Link="DrainPlanCore.cs" />
+    <Compile Include="..\..\cad_addin\src\PowerWireCore.cs" Link="PowerWireCore.cs" />
   </ItemGroup>
 
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
