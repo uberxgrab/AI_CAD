@@ -529,6 +529,10 @@ corner with R = W/2. If it is still too short, refuse the point and say why.
    | Align tolerance | 200 |
    | Jog tolerance | 200 |
    | Refnet scale s | 1.24 |
+   | R1: min pipe from a refnet outlet to the next refnet inlet | 1000 |
+   | R2: min straight pipe from an outlet to the next bend or refnet inlet | 500 |
+   | R3: max pipe from the first refnet inlet to the farthest indoor unit | 40000 |
+   | R3: construction allowance (warn above max - allowance, 37 m) | 3000 |
    | Base angle | UCS X |
 
 3. **Clean the geometry,** in the core and in this fixed order:
@@ -556,24 +560,55 @@ corner with R = W/2. If it is still too short, refuse the point and say why.
    - The upstream edge is the edge toward the root, with direction d̂ from the
      upstream edge into N.
    - The through child is the one collinear with d̂; the branch is the other.
-   - Insert `Branch Connection (1)`, imported from the template if missing, on the
+   - Set the refnet back from N by D (at least the R2 distance, default 500) and
+     insert `Branch Connection (1)`, imported from the template if missing, on the
      upstream pipe's layer.
-     - At scale s, with its inlet at N − 750·s·d̂ and rotation along d̂.
+     - At scale s: main outlet at N − D·d̂, inlet at N − (D + 750·s)·d̂, rotation
+       along d̂.
      - Local geometry: inlet (0,0), main outlet (750,0), branch outlet (750,−200),
        all pointing local +X.
      - Mirror the block (X scale −s, rotation + 180°) when the branch is on the left
        of d̂.
-   - Cut the pipes at all three ports:
+   - Cut the pipes:
      - the upstream pipe ends at the inlet;
-     - the through pipe starts at N;
-     - the branch pipe starts at N + 200·s·n̂, where n̂ is the unit normal toward
-       the branch.
+     - the through pipe starts at the main outlet and runs straight on through N,
+       which stops being a node of the main;
+     - a new pipe of length D, on the branch's layer, runs parallel to the main from
+       the branch outlet (N − D·d̂ + 200·s·n̂, n̂ the unit normal toward the branch) to
+       N + 200·s·n̂;
+     - the original branch pipe starts at N + 200·s·n̂.
+   - **Piping rules** (settings above), measured on the finished geometry along the
+     pipe, with the refnet bodies counted (750·s on the main; the straight distance
+     between the inlet and branch outlet ports on a branch):
+     - R1: from an outlet (main or branch) to the inlet of the next refnet.
+     - R2: from an outlet to the next bend or the next refnet inlet. The D-long branch
+       pipe ends at a bend, so D ≥ R2 meets it on both outlets. A pipe end is not a
+       change of flow, so nothing is checked there.
+     - R3: from the inlet of the first refnet (nearest the root) to the farthest
+       indoor unit; every pipe end other than the root is a unit. A warning above
+       max − allowance, worded differently above max. It never moves anything.
+   - **Choosing D.** Every D starts at the R2 distance. Going from the leaves back to
+     the root, a refnet's D is raised to what the refnets after it need, so that
+     D_up ≥ D_down + R1 + 750·s − (pipe length between the two T nodes). D is capped
+     by the upstream run less 750·s (the run includes the upstream refnet's D on a
+     through pipe, so those caps chain back) and by the room for the D-long branch
+     pipe: the pipe must not cross or touch another pipe, or another new branch pipe,
+     so a clash lowers that refnet's cap (1 mm short of the clash) and the plan is
+     made again.
+   - **Rule not met.** If the cap stops a rule being met, the refnet is still
+     inserted at the capped D (the closest to compliant), the point is circled in the
+     preview and a warning gives the rule, the measured value and the required value.
+     Warnings print before the Yes/No question and again in the summary. When the
+     network is already clean and nothing is written, the R3 distance and the
+     warnings are still printed, for refnet blocks whose three ports meet pipe ends.
    - Report, and do not modify, these cases:
-     - the upstream straight run is shorter than 750·s;
+     - the upstream run is shorter than 750·s plus the least D (counting the largest D
+       of the refnet just upstream on a through pipe);
      - the branch's first leg is shorter than 200·s;
      - no collinear through child (a bull-head tee);
      - degree 4 or more;
-     - an existing `Branch Connection (1)` at N.
+     - an existing `Branch Connection (1)` at N;
+     - the D-long branch pipe cannot clear another pipe even at the least D.
 6. **No sizing.** The command does not size pipes. Use `HVACPIPESIZE` with the
    `RP` layers.
 
@@ -617,7 +652,12 @@ Where the spec left a choice, the code does this (all conservative):
   the originals are erased, and refnets are inserted, all in one transaction.
 - **Refnet cases reported and left unchanged**, besides the spec's: a branch that does not
   leave the main at right angles (within the angle tolerance), and networks with no root.
-  The upstream-run check uses the run left after an earlier refnet's port cut.
+  The upstream-run check counts the run left after an earlier refnet's turn on a branch, and
+  the earlier refnet's largest D on a through pipe.
+- **Piping rules:** R1, R2 and R3 are measured on the finished graph (pipes plus refnet bodies), and
+  the D choice only aims at them. A bend is a turn of more than 1 degree. R2 is not checked at
+  a pipe end. R3 needs a refnet: with none, it is skipped. Existing refnet blocks join the
+  graph only when all three ports meet pipe ends within the weld tolerance.
 - The block is inserted with `Scale3d(+-s, s, s)`; attributes of the block are added
   with their default text.
 
@@ -628,7 +668,7 @@ Where the spec left a choice, the code does this (all conservative):
   polylines, arcs), orthogonalisation (the cluster span cap, anchors, validation
   failures) and refnet placement (mirroring, short-leg reports). Run every check
   under en-US, vi-VN and tr-TR.
-- **Pipe core tests:** `tests/PipeCoreTests` (about 960 checks per culture) cover the
+- **Pipe core tests:** `tests/PipeCoreTests` (about 1170 checks per culture) cover the
   above for the pipe stream; run them with `dotnet run --project tests\PipeCoreTests\PipeCoreTests.csproj -c Debug`.
   `tests/PipeAcadTests` is not written yet.
 - **Headless tests:** an `accoreconsole` test project per stream
