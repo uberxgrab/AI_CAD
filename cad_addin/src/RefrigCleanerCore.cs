@@ -42,7 +42,7 @@ namespace HvacAiCadAddin.Pipes
     {
         /// <summary>The degree-3 node the refnet replaces.</summary>
         public Vec2 Node;
-        /// <summary>Insertion point: the block's inlet.</summary>
+        /// <summary>Insertion point: the block's inlet, <see cref="SetBack"/> + 750 s upstream of <see cref="Node"/>.</summary>
         public Vec2 Inlet;
         /// <summary>Unit direction from the inlet toward the main outlet.</summary>
         public Vec2 Direction;
@@ -51,8 +51,17 @@ namespace HvacAiCadAddin.Pipes
         public double Scale;
         public string Layer;
         public double Elevation;
+        /// <summary>The main outlet: <see cref="SetBack"/> upstream of <see cref="Node"/>, on the main.</summary>
         public Vec2 MainPort;
+        /// <summary>The branch outlet, 200 s to the side of <see cref="MainPort"/>.</summary>
         public Vec2 BranchPort;
+        /// <summary>
+        /// Where the branch pipe turns toward the branch: 200 s to the side of <see cref="Node"/>. A pipe
+        /// of length <see cref="SetBack"/> runs from <see cref="BranchPort"/> to here.
+        /// </summary>
+        public Vec2 BranchTurn;
+        /// <summary>How far the main outlet is back from the T node (mm); at least the R2 distance.</summary>
+        public double SetBack;
 
         /// <summary>Block rotation: along the direction, plus 180 degrees when mirrored.</summary>
         public double Rotation
@@ -67,6 +76,21 @@ namespace HvacAiCadAddin.Pipes
         }
     }
 
+    /// <summary>One measured check of a piping rule (R1, R2 or R3), kept whether it passed or not.</summary>
+    public sealed class RuleCheck
+    {
+        /// <summary>"R1", "R2" or "R3".</summary>
+        public string Rule;
+        /// <summary>The refnet's T node (R1: the downstream refnet's) or, for R3, the farthest indoor unit.</summary>
+        public Vec2 At;
+        public double Measured;
+        /// <summary>R1, R2: the least allowed (mm). R3: the length above which a warning is given (mm).</summary>
+        public double Required;
+        public bool Passed;
+        /// <summary>The warning text of a failed check, otherwise null.</summary>
+        public string Message;
+    }
+
     public sealed class RefrigResult
     {
         public bool Ok;
@@ -78,6 +102,16 @@ namespace HvacAiCadAddin.Pipes
         /// <summary>Cases the command reports and leaves alone.</summary>
         public readonly List<string> Reports = new List<string>();
         public readonly List<Vec2> ReportPoints = new List<Vec2>();
+
+        /// <summary>Every R1, R2 and R3 measurement, passed or not.</summary>
+        public readonly List<RuleCheck> RuleChecks = new List<RuleCheck>();
+        /// <summary>The failed checks: the refnets are still placed, the user is told.</summary>
+        public readonly List<string> Warnings = new List<string>();
+        public readonly List<Vec2> WarningPoints = new List<Vec2>();
+        /// <summary>R3: pipe length from the first refnet's inlet to the farthest indoor unit (mm); -1 when there is no refnet or unit.</summary>
+        public double FarthestUnitDistance = -1;
+        public Vec2 FarthestUnit;
+        public Vec2 FirstRefnetInlet;
 
         /// <summary>False when the network is already clean and no refnet is due: nothing to write.</summary>
         public bool Changed;
@@ -1256,12 +1290,80 @@ namespace HvacAiCadAddin.Pipes
             }
 
             // ------------------------------------------------------------------ refnets
+            //
+            // A refnet is set back from its T node N by D, the set-back (at least OutletStraight, R2).
+            // With d the flow direction into N, n the unit normal toward the branch and s the scale:
+            //   main outlet   M  = N - D d              inlet        I  = N - (D + 750 s) d
+            //   branch outlet B1 = M + 200 s n          branch turn  B2 = N + 200 s n
+            // The upstream pipe is cut at I, the through pipe runs from M straight on through N (N stops
+            // being a node), a new D-long branch pipe runs from B1 to B2 on the branch's layer, and the
+            // original branch pipe starts at B2.
+            //
+            // The set-backs are chosen on a plan first (Analyse and Solve change nothing), then applied.
+
+            private const double StripClearance = 1.0;
+            private const double BendSine = 0.01745240643728351; // sin(1 degree): a flatter turn is not a bend
+
+            /// <summary>One refnet to place.</summary>
+            private sealed class Plan
+            {
+                public int Node;
+                public Vec2 N;
+                public CEdge Up;
+                public CEdge Through;
+                public CEdge Branch;
+                public Vec2 Direction;
+                public Vec2 Normal;
+                public bool Mirrored;
+                public double Body;
+                public double Offset;
+                /// <summary>The nearest refnet upstream, or null; <see cref="PredThrough"/> is true when the pipe leaves its main outlet.</summary>
+                public Plan Pred;
+                public bool PredThrough;
+                /// <summary>Pipe length from the predecessor's node N (less 200 s on its branch side) to this node.</summary>
+                public double PredPath;
+                /// <summary>True when that pipe is straight, with no bend or junction, from the predecessor's main outlet.</summary>
+                public bool PredStraight;
+                /// <summary>The predecessor when this refnet's last upstream pipe starts at the predecessor's node.</summary>
+                public Plan Adjacent;
+                public bool AdjacentThrough;
+                /// <summary>The greatest set-back that keeps the inlet on the upstream pipe and the branch pipe clear.</summary>
+                public double Hi;
+                public double D;
+                public readonly List<Plan> Next = new List<Plan>();
+                public int InletNode;
+                public int MainNode;
+                public int BranchNode;
+            }
+
+            /// <summary>How the pipe reaches a node from the refnet upstream of it.</summary>
+            private sealed class Trail
+            {
+                public Plan Pred;
+                public bool Through;
+                public double Path;
+                public bool Straight;
+            }
+
+            // Limits found by the clash checks, kept between passes: the greatest set-back of a refnet's
+            // node, and the nodes whose refnet cannot be placed at all.
+            private readonly Dictionary<int, double> _stripLimit = new Dictionary<int, double>();
+            private readonly HashSet<int> _stripForced = new HashSet<int>();
 
             private int AddNode(Vec2 point)
             {
                 CNode node = new CNode { Id = _nodes.Count, P = point, Orig = point };
                 _nodes.Add(node);
                 return node.Id;
+            }
+
+            private CEdge AddEdge(int a, int b, string layer, int curve)
+            {
+                CEdge edge = new CEdge { Id = _edges.Count, A = a, B = b, Layer = layer, Curve = curve };
+                _edges.Add(edge);
+                _nodes[a].Edges.Add(edge.Id);
+                _nodes[b].Edges.Add(edge.Id);
+                return edge;
             }
 
             private void Report(string message, Vec2 point)
@@ -1272,9 +1374,6 @@ namespace HvacAiCadAddin.Pipes
 
             private void PlaceRefnets()
             {
-                double scale = _settings.RefnetScale;
-                double inletLength = RefrigSettings.RefnetLength * scale;
-                double branchOffset = RefrigSettings.RefnetBranchOffset * scale;
                 int root = Resolve(_root);
 
                 // Breadth-first from the root: each node's parent edge is the upstream pipe.
@@ -1307,105 +1406,399 @@ namespace HvacAiCadAddin.Pipes
                         _nodes[root].P);
                 }
 
+                // Choose the set-backs. A branch pipe that clashes with another new branch pipe lowers that
+                // refnet's limit (or drops it) and the plan is made again; each pass lowers a limit by at
+                // least 1 mm or drops a refnet, so this ends. After many passes the clashing refnet is dropped.
+                List<Plan> plans;
+                List<string> messages = new List<string>();
+                List<Vec2> points = new List<Vec2>();
+                for (int pass = 0; ; pass++)
+                {
+                    messages.Clear();
+                    points.Clear();
+                    plans = Analyse(order, parentEdge, root, messages, points);
+                    Solve(plans);
+                    if (!SeparateStrips(plans, pass >= 500))
+                        break;
+                }
+
+                for (int i = 0; i < messages.Count; i++)
+                    Report(messages[i], points[i]);
+
+                ApplyPlans(plans);
+                EvaluateRules(plans);
+            }
+
+            // Walks the tree from the root and makes a plan for every junction that gets a refnet. The graph
+            // is not changed. Cases that get no refnet go into messages.
+            private List<Plan> Analyse(
+                List<int> order, Dictionary<int, int> parentEdge, int root, List<string> messages, List<Vec2> points)
+            {
+                List<Plan> plans = new List<Plan>();
+                Dictionary<int, Plan> byNode = new Dictionary<int, Plan>();
+                Dictionary<int, Trail> trails = new Dictionary<int, Trail>();
+                trails[root] = new Trail();
+
                 foreach (int id in order)
                 {
                     CNode node = _nodes[id];
-                    int degree = node.Edges.Count;
-                    if (degree < 3)
-                        continue;
-
-                    Vec2 n = node.P;
-                    if (degree >= 4)
+                    Trail here = trails[id];
+                    int upId = parentEdge[id];
+                    Plan plan = null;
+                    if (node.Edges.Count >= 3)
                     {
-                        Report("Degree-" + degree + " junction at " + At(n) + ": no refnet placed.", n);
-                        continue;
+                        if (upId < 0)
+                        {
+                            messages.Add("The root at " + At(node.P) + " joins " + node.Edges.Count
+                                + " pipes: no refnet placed there.");
+                            points.Add(node.P);
+                        }
+                        else
+                        {
+                            plan = TryPlan(id, _edges[upId], here, byNode, messages, points);
+                        }
+
+                        if (plan != null)
+                        {
+                            plans.Add(plan);
+                            byNode[id] = plan;
+                            if (plan.Pred != null)
+                                plan.Pred.Next.Add(plan);
+                        }
                     }
 
-                    if (ExistingRefnetAt(n))
-                    {
-                        Report("A " + RefrigSettings.RefnetBlockName + " already exists at " + At(n)
-                            + ": left unchanged.", n);
-                        continue;
-                    }
-
-                    CEdge up = _edges[parentEdge[id]];
-                    List<CEdge> children = new List<CEdge>();
                     foreach (int edgeId in node.Edges)
                     {
-                        if (edgeId != up.Id)
-                            children.Add(_edges[edgeId]);
+                        if (edgeId == upId)
+                            continue;
+
+                        CEdge edge = _edges[edgeId];
+                        double length = EdgeLength(edge);
+                        Trail trail = new Trail();
+                        if (plan != null)
+                        {
+                            trail.Pred = plan;
+                            trail.Through = edge.Id == plan.Through.Id;
+                            trail.Path = trail.Through ? length : length - plan.Offset;
+                            trail.Straight = trail.Through;
+                        }
+                        else
+                        {
+                            trail.Pred = here.Pred;
+                            trail.Through = here.Through;
+                            trail.Path = here.Path + length;
+                            trail.Straight = here.Straight && upId >= 0 && node.Edges.Count == 2
+                                && !IsBend(
+                                    _nodes[_edges[upId].OtherNode(id)].P,
+                                    node.P,
+                                    _nodes[edge.OtherNode(id)].P);
+                        }
+
+                        trails[edge.OtherNode(id)] = trail;
                     }
+                }
 
-                    if (children.Count != 2)
-                        continue;
+                return plans;
+            }
 
-                    Vec2 upstreamPoint = _nodes[up.OtherNode(id)].P;
-                    Vec2 d = n - upstreamPoint;
-                    double upstreamLength = d.Length;
-                    Vec2 direction = d.Normalized();
+            private static void Note(List<string> messages, List<Vec2> points, string text, Vec2 point)
+            {
+                messages.Add(text);
+                points.Add(point);
+            }
 
-                    Vec2 toFirst = (_nodes[children[0].OtherNode(id)].P - n).Normalized();
-                    Vec2 toSecond = (_nodes[children[1].OtherNode(id)].P - n).Normalized();
-                    double dotFirst = direction.Dot(toFirst);
-                    double dotSecond = direction.Dot(toSecond);
-                    CEdge through = dotFirst >= dotSecond ? children[0] : children[1];
-                    CEdge branch = dotFirst >= dotSecond ? children[1] : children[0];
-                    double throughDot = Math.Max(dotFirst, dotSecond);
-                    if (throughDot < Math.Cos(_angleTolerance))
+            private Plan TryPlan(
+                int id, CEdge up, Trail here, Dictionary<int, Plan> byNode, List<string> messages, List<Vec2> points)
+            {
+                CNode node = _nodes[id];
+                Vec2 n = node.P;
+                int degree = node.Edges.Count;
+                double body = RefrigSettings.RefnetLength * _settings.RefnetScale;
+                double offset = RefrigSettings.RefnetBranchOffset * _settings.RefnetScale;
+                double minSetBack = _settings.OutletStraight;
+
+                if (degree >= 4)
+                {
+                    Note(messages, points, "Degree-" + degree + " junction at " + At(n) + ": no refnet placed.", n);
+                    return null;
+                }
+
+                if (ExistingRefnetAt(n))
+                {
+                    Note(messages, points, "A " + RefrigSettings.RefnetBlockName + " already exists at " + At(n)
+                        + ": left unchanged.", n);
+                    return null;
+                }
+
+                List<CEdge> children = new List<CEdge>();
+                foreach (int edgeId in node.Edges)
+                {
+                    if (edgeId != up.Id)
+                        children.Add(_edges[edgeId]);
+                }
+
+                if (children.Count != 2)
+                    return null;
+
+                int upNode = up.OtherNode(id);
+                Vec2 d = n - _nodes[upNode].P;
+                double upstreamLength = d.Length;
+                Vec2 direction = d.Normalized();
+
+                Vec2 toFirst = (_nodes[children[0].OtherNode(id)].P - n).Normalized();
+                Vec2 toSecond = (_nodes[children[1].OtherNode(id)].P - n).Normalized();
+                double dotFirst = direction.Dot(toFirst);
+                double dotSecond = direction.Dot(toSecond);
+                CEdge through = dotFirst >= dotSecond ? children[0] : children[1];
+                CEdge branch = dotFirst >= dotSecond ? children[1] : children[0];
+                double throughDot = Math.Max(dotFirst, dotSecond);
+                if (throughDot < Math.Cos(_angleTolerance))
+                {
+                    Note(messages, points, "Bull-head tee at " + At(n)
+                        + ": neither branch continues the upstream pipe, so no refnet was placed.", n);
+                    return null;
+                }
+
+                // The room for the set-back: the upstream pipe, plus the set-back of the refnet just upstream
+                // when this refnet's last upstream pipe is that refnet's through pipe (it runs on from that
+                // refnet's main outlet, so pushing that refnet back lengthens it). On a branch the pipe
+                // starts 200 s along it, after the upstream refnet's branch pipe.
+                Plan adjacent;
+                byNode.TryGetValue(upNode, out adjacent);
+                bool adjacentThrough = adjacent != null && up.Id == adjacent.Through.Id;
+                double lastRun = upstreamLength - (adjacent != null && !adjacentThrough ? adjacent.Offset : 0);
+                double runHi = lastRun - body + (adjacentThrough ? adjacent.Hi : 0);
+                if (runHi < minSetBack - 1e-6)
+                {
+                    Note(messages, points, "The upstream straight run into " + At(n) + " is at most "
+                        + Num(runHi + body) + " mm, shorter than the refnet's " + Num(body)
+                        + " mm plus its " + Num(minSetBack) + " mm set-back: no refnet placed.", n);
+                    return null;
+                }
+
+                Vec2 branchDirection = (_nodes[branch.OtherNode(id)].P - n).Normalized();
+                double branchLength = EdgeLength(branch);
+                if (branchLength < offset - 1e-6)
+                {
+                    Note(messages, points, "The branch leg at " + At(n) + " is " + Num(branchLength)
+                        + " mm, shorter than " + Num(offset) + " mm: no refnet placed.", n);
+                    return null;
+                }
+
+                double side = direction.Cross(branchDirection);
+                if (Math.Abs(direction.Dot(branchDirection)) > Math.Sin(_angleTolerance))
+                {
+                    Note(messages, points, "The branch at " + At(n)
+                        + " does not leave the main at right angles, so no refnet was placed.", n);
+                    return null;
+                }
+
+                // The branch is on the left of the flow when side > 0; the block's own branch is on
+                // the right, so a left branch mirrors it.
+                bool mirrored = side > 0;
+                Vec2 normal = direction.Left * (mirrored ? 1 : -1);
+
+                // The new branch pipe must not cross or overlap another pipe, so it limits the set-back.
+                double hi = runHi;
+                double hit = StripHit(n + normal * offset, -direction, runHi, up, children[0], children[1]);
+                if (hit >= 0)
+                    hi = Math.Min(hi, hit - StripClearance);
+                double limit;
+                if (_stripLimit.TryGetValue(id, out limit))
+                    hi = Math.Min(hi, limit);
+                if (_stripForced.Contains(id))
+                    hi = -1;
+                if (hi < minSetBack - 1e-6)
+                {
+                    Note(messages, points, "The branch pipe at " + At(n) + ", set back at least "
+                        + Num(minSetBack) + " mm from the junction, would cross or overlap another pipe: "
+                        + "no refnet placed.", n);
+                    return null;
+                }
+
+                return new Plan
+                {
+                    Node = id,
+                    N = n,
+                    Up = up,
+                    Through = through,
+                    Branch = branch,
+                    Direction = direction,
+                    Normal = normal,
+                    Mirrored = mirrored,
+                    Body = body,
+                    Offset = offset,
+                    Pred = here.Pred,
+                    PredThrough = here.Through,
+                    PredPath = here.Path,
+                    PredStraight = here.Straight,
+                    Adjacent = adjacent,
+                    AdjacentThrough = adjacentThrough,
+                    Hi = hi,
+                    D = minSetBack
+                };
+            }
+
+            // Every refnet starts at the smallest set-back. From the leaves back to the root, a refnet is
+            // set back far enough that each refnet downstream of it has R1 (and R2, when no bend comes
+            // first) of pipe between this refnet's outlet and its inlet:
+            //   D_up >= D_down + need + body_down - (pipe length between the two T nodes)
+            // capped at the refnet's limit. A refnet that hits its cap leaves the rule broken, and
+            // EvaluateRules reports it. The cap keeps each inlet on its own upstream pipe.
+            private void Solve(List<Plan> plans)
+            {
+                for (int i = plans.Count - 1; i >= 0; i--)
+                {
+                    Plan plan = plans[i];
+                    double want = _settings.OutletStraight;
+                    foreach (Plan next in plan.Next)
                     {
-                        Report("Bull-head tee at " + At(n)
-                            + ": neither branch continues the upstream pipe, so no refnet was placed.", n);
-                        continue;
+                        double need = _settings.RefnetSpacing;
+                        if (next.PredStraight)
+                            need = Math.Max(need, _settings.OutletStraight);
+                        want = Math.Max(want, next.D + need + next.Body - next.PredPath);
                     }
 
-                    if (upstreamLength < inletLength - 1e-6)
+                    plan.D = Math.Min(want, plan.Hi);
+                }
+            }
+
+            // The smallest distance back along the line a + t u (0 <= t <= maxT) at which it touches the
+            // segment q1-q2 (within ConflictDistance), or -1.
+            private static double FirstHit(Vec2 a, Vec2 u, double maxT, Vec2 q1, Vec2 q2)
+            {
+                Vec2 e = q2 - q1;
+                double length = e.Length;
+                Vec2 w = q1 - a;
+                if (length < 1e-9)
+                {
+                    double along = w.Dot(u);
+                    if (Math.Abs(u.Cross(w)) <= ConflictDistance
+                        && along >= -ConflictDistance && along <= maxT + ConflictDistance)
+                        return Math.Max(along, 0);
+                    return -1;
+                }
+
+                double cross = u.Cross(e);
+                if (Math.Abs(cross) > 1e-9 * length)
+                {
+                    double t = w.Cross(e) / cross;
+                    double s = w.Cross(u) / cross;
+                    double sTolerance = ConflictDistance / length;
+                    if (s >= -sTolerance && s <= 1 + sTolerance
+                        && t >= -ConflictDistance && t <= maxT + ConflictDistance)
+                        return Math.Max(t, 0);
+                    return -1;
+                }
+
+                // Parallel: they touch only when they share a line.
+                if (Math.Abs(u.Cross(w)) > ConflictDistance)
+                    return -1;
+                double t1 = w.Dot(u);
+                double t2 = (q2 - a).Dot(u);
+                double lo = Math.Min(t1, t2);
+                double hi = Math.Max(t1, t2);
+                if (hi < -ConflictDistance || lo > maxT + ConflictDistance)
+                    return -1;
+                return Math.Max(lo, 0);
+            }
+
+            // How far back from the branch turn a branch pipe can run before it meets a pipe of the
+            // drawing, or -1. The refnet's own three pipes are left out.
+            private double StripHit(Vec2 turn, Vec2 back, double maxT, CEdge a, CEdge b, CEdge c)
+            {
+                double best = -1;
+                foreach (CEdge edge in _edges)
+                {
+                    if (edge.Dead || edge.Id == a.Id || edge.Id == b.Id || edge.Id == c.Id)
+                        continue;
+                    double t = FirstHit(turn, back, maxT, _nodes[edge.A].P, _nodes[edge.B].P);
+                    if (t >= 0 && (best < 0 || t < best))
+                        best = t;
+                }
+
+                return best;
+            }
+
+            // New branch pipes must not cross or overlap each other either. On the first clash the later
+            // refnet gets a lower limit (or is dropped when the limit is below the least set-back) and the
+            // caller plans again. Returns true when something changed.
+            private bool SeparateStrips(List<Plan> plans, bool dropClashing)
+            {
+                for (int j = 1; j < plans.Count; j++)
+                {
+                    Plan later = plans[j];
+                    if (later.D <= ZeroLength)
+                        continue;
+                    Vec2 turnLater = later.N + later.Normal * later.Offset;
+                    for (int i = 0; i < j; i++)
                     {
-                        Report("The upstream straight run into " + At(n) + " is " + Num(upstreamLength)
-                            + " mm, shorter than the refnet's " + Num(inletLength)
-                            + " mm: no refnet placed.", n);
-                        continue;
-                    }
+                        Plan earlier = plans[i];
+                        if (earlier.D <= ZeroLength)
+                            continue;
+                        Vec2 turnEarlier = earlier.N + earlier.Normal * earlier.Offset;
+                        Vec2 farEarlier = turnEarlier - earlier.Direction * earlier.D;
+                        double hit = FirstHit(turnLater, -later.Direction, later.D, farEarlier, turnEarlier);
+                        if (hit < 0)
+                            continue;
 
-                    Vec2 branchDirection = (_nodes[branch.OtherNode(id)].P - n).Normalized();
-                    double branchLength = EdgeLength(branch);
-                    if (branchLength < branchOffset - 1e-6)
+                        double limit = hit - StripClearance;
+                        if (dropClashing || limit < _settings.OutletStraight - 1e-6)
+                        {
+                            _stripForced.Add(later.Node);
+                        }
+                        else
+                        {
+                            double old;
+                            if (!_stripLimit.TryGetValue(later.Node, out old) || limit < old)
+                                _stripLimit[later.Node] = limit;
+                        }
+
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            private void ApplyPlans(List<Plan> plans)
+            {
+                double scale = _settings.RefnetScale;
+                foreach (Plan plan in plans)
+                {
+                    Vec2 inlet = plan.N - plan.Direction * (plan.D + plan.Body);
+                    Vec2 mainPort = plan.N - plan.Direction * plan.D;
+                    Vec2 branchPort = mainPort + plan.Normal * plan.Offset;
+                    Vec2 turn = plan.N + plan.Normal * plan.Offset;
+
+                    plan.InletNode = AddNode(inlet);
+                    plan.MainNode = AddNode(mainPort);
+                    int turnNode = AddNode(turn);
+                    Reattach(plan.Up, plan.Node, plan.InletNode);
+                    Reattach(plan.Through, plan.Node, plan.MainNode);
+                    Reattach(plan.Branch, plan.Node, turnNode);
+                    plan.BranchNode = turnNode;
+                    if (plan.D > ZeroLength)
                     {
-                        Report("The branch leg at " + At(n) + " is " + Num(branchLength)
-                            + " mm, shorter than " + Num(branchOffset) + " mm: no refnet placed.", n);
-                        continue;
+                        plan.BranchNode = AddNode(branchPort);
+                        AddEdge(plan.BranchNode, turnNode, plan.Branch.Layer, plan.Branch.Curve);
                     }
 
-                    double side = direction.Cross(branchDirection);
-                    if (Math.Abs(direction.Dot(branchDirection)) > Math.Sin(_angleTolerance))
-                    {
-                        Report("The branch at " + At(n)
-                            + " does not leave the main at right angles, so no refnet was placed.", n);
-                        continue;
-                    }
-
-                    // The branch is on the left of the flow when side > 0; the block's own branch is on
-                    // the right, so a left branch mirrors it.
-                    bool mirrored = side > 0;
-                    Vec2 normal = direction.Left * (mirrored ? 1 : -1);
-                    Vec2 inlet = n - direction * inletLength;
-                    Vec2 branchPort = n + normal * branchOffset;
-
-                    int inletNode = AddNode(inlet);
-                    int branchNode = AddNode(branchPort);
-                    Reattach(up, id, inletNode);
-                    Reattach(branch, id, branchNode);
+                    _nodes[plan.Node].Dead = true;
 
                     _result.Refnets.Add(new RefnetPlacement
                     {
-                        Node = n,
+                        Node = plan.N,
                         Inlet = inlet,
-                        Direction = direction,
-                        Mirrored = mirrored,
+                        Direction = plan.Direction,
+                        Mirrored = plan.Mirrored,
                         Scale = scale,
-                        Layer = up.Layer,
-                        Elevation = _input.Curves[up.Curve].Elevation,
-                        MainPort = n,
-                        BranchPort = branchPort
+                        Layer = plan.Up.Layer,
+                        Elevation = _input.Curves[plan.Up.Curve].Elevation,
+                        MainPort = mainPort,
+                        BranchPort = branchPort,
+                        BranchTurn = turn,
+                        SetBack = plan.D
                     });
                 }
             }
@@ -1429,6 +1822,370 @@ namespace HvacAiCadAddin.Pipes
                 }
 
                 return false;
+            }
+
+            // ------------------------------------------------------------------ piping rules
+            //
+            // R1, R2 and R3 are measured on the finished geometry, so what is reported is what is drawn.
+            // The rules graph is the pipes plus the refnet bodies: the inlet joins the main outlet (the
+            // body length, 750 s) and the branch outlet (the straight distance between the two ports,
+            // 776 s). Refnet blocks already in the drawing join the graph the same way when their three
+            // ports meet pipe ends.
+
+            private sealed class RuleRefnet
+            {
+                public Vec2 At;
+                public int Inlet;
+                public int Main;
+                public int Branch;
+                public double MainBody;
+                public double BranchBody;
+            }
+
+            private sealed class Link
+            {
+                public int To;
+                public double Length;
+                public bool Pipe;
+            }
+
+            private sealed class Frame
+            {
+                public int Node;
+                public int From;
+                public double Dist;
+                public bool Straight;
+                public Vec2 Prev;
+            }
+
+            private static bool IsBend(Vec2 before, Vec2 at, Vec2 after)
+            {
+                Vec2 a = at - before;
+                Vec2 b = after - at;
+                double la = a.Length;
+                double lb = b.Length;
+                if (la < ZeroLength || lb < ZeroLength)
+                    return false;
+                return a.Dot(b) < 0 || Math.Abs(a.Cross(b)) / (la * lb) > BendSine;
+            }
+
+            private static string Metres(double millimetres)
+            {
+                return (millimetres / 1000.0).ToString("0.00", CultureInfo.InvariantCulture);
+            }
+
+            private static void AddLink(
+                Dictionary<int, List<Link>> links, int a, int b, double length, bool pipe)
+            {
+                List<Link> list;
+                if (!links.TryGetValue(a, out list))
+                    links[a] = list = new List<Link>();
+                list.Add(new Link { To = b, Length = length, Pipe = pipe });
+                if (!links.TryGetValue(b, out list))
+                    links[b] = list = new List<Link>();
+                list.Add(new Link { To = a, Length = length, Pipe = pipe });
+            }
+
+            private static List<Link> LinksOf(Dictionary<int, List<Link>> links, int node)
+            {
+                List<Link> list;
+                return links.TryGetValue(node, out list) ? list : new List<Link>();
+            }
+
+            private int NodeNear(Vec2 point)
+            {
+                int best = -1;
+                double bestDistance = _settings.WeldTolerance;
+                foreach (CNode node in _nodes)
+                {
+                    if (node.Dead || node.Edges.Count == 0)
+                        continue;
+                    double distance = node.P.DistanceTo(point);
+                    if (distance <= bestDistance)
+                    {
+                        bestDistance = distance;
+                        best = node.Id;
+                    }
+                }
+
+                return best;
+            }
+
+            private void AddExistingRefnets(List<RuleRefnet> refnets)
+            {
+                // Three ports per block: inlet, main outlet, branch outlet.
+                IList<Vec2> ports = _input.ExistingRefnetPorts;
+                for (int i = 0; i + 2 < ports.Count; i += 3)
+                {
+                    int inlet = NodeNear(ports[i]);
+                    int main = NodeNear(ports[i + 1]);
+                    int branch = NodeNear(ports[i + 2]);
+                    if (inlet < 0 || main < 0 || branch < 0 || inlet == main || inlet == branch || main == branch)
+                        continue;
+
+                    refnets.Add(new RuleRefnet
+                    {
+                        At = ports[i],
+                        Inlet = inlet,
+                        Main = main,
+                        Branch = branch,
+                        MainBody = ports[i].DistanceTo(ports[i + 1]),
+                        BranchBody = ports[i].DistanceTo(ports[i + 2])
+                    });
+                }
+            }
+
+            private void EvaluateRules(List<Plan> plans)
+            {
+                List<RuleRefnet> refnets = new List<RuleRefnet>();
+                foreach (Plan plan in plans)
+                {
+                    refnets.Add(new RuleRefnet
+                    {
+                        At = plan.N,
+                        Inlet = plan.InletNode,
+                        Main = plan.MainNode,
+                        Branch = plan.BranchNode,
+                        MainBody = plan.Body,
+                        BranchBody = Math.Sqrt(plan.Body * plan.Body + plan.Offset * plan.Offset)
+                    });
+                }
+
+                AddExistingRefnets(refnets);
+                if (refnets.Count == 0)
+                    return;
+
+                Dictionary<int, List<Link>> links = new Dictionary<int, List<Link>>();
+                foreach (CEdge edge in _edges)
+                {
+                    if (!edge.Dead)
+                        AddLink(links, edge.A, edge.B, EdgeLength(edge), true);
+                }
+
+                Dictionary<int, RuleRefnet> inletOf = new Dictionary<int, RuleRefnet>();
+                foreach (RuleRefnet refnet in refnets)
+                {
+                    AddLink(links, refnet.Inlet, refnet.Main, refnet.MainBody, false);
+                    AddLink(links, refnet.Inlet, refnet.Branch, refnet.BranchBody, false);
+                    inletOf[refnet.Inlet] = refnet;
+                }
+
+                foreach (RuleRefnet refnet in refnets)
+                {
+                    CheckOutlet(links, inletOf, refnet, refnet.Main, "main");
+                    CheckOutlet(links, inletOf, refnet, refnet.Branch, "branch");
+                }
+
+                CheckUnitRun(links, refnets);
+            }
+
+            private void AddCheck(string rule, Vec2 at, double measured, double required, string failure)
+            {
+                bool passed = measured >= required - 1e-6;
+                _result.RuleChecks.Add(new RuleCheck
+                {
+                    Rule = rule,
+                    At = at,
+                    Measured = measured,
+                    Required = required,
+                    Passed = passed,
+                    Message = passed ? null : failure
+                });
+                if (!passed)
+                {
+                    _result.Warnings.Add(failure);
+                    _result.WarningPoints.Add(at);
+                }
+            }
+
+            // R1 and R2 for one outlet. Walks the pipe downstream from the outlet. R1: the pipe length to
+            // each refnet inlet reached. R2: the straight length to the first change of flow, a bend, a
+            // junction or a refnet inlet. A pipe end is not a change of flow: nothing is checked there.
+            private void CheckOutlet(
+                Dictionary<int, List<Link>> links,
+                Dictionary<int, RuleRefnet> inletOf,
+                RuleRefnet from,
+                int outlet,
+                string which)
+            {
+                string source = "the " + which + " outlet of the refnet at " + At(from.At);
+                Stack<Frame> stack = new Stack<Frame>();
+                stack.Push(new Frame { Node = outlet, From = from.Inlet, Dist = 0, Straight = true, Prev = _nodes[outlet].P });
+                int guard = 0;
+                while (stack.Count > 0 && guard++ < 1000000)
+                {
+                    Frame frame = stack.Pop();
+                    Vec2 here = _nodes[frame.Node].P;
+
+                    RuleRefnet next;
+                    if (frame.Node != outlet && inletOf.TryGetValue(frame.Node, out next))
+                    {
+                        string target = "the inlet of the refnet at " + At(next.At);
+                        AddCheck("R1", next.At, frame.Dist, _settings.RefnetSpacing,
+                            "R1: " + Num(frame.Dist) + " mm of pipe from " + source + " to " + target
+                            + "; at least " + Num(_settings.RefnetSpacing) + " mm is required.");
+                        if (frame.Straight)
+                        {
+                            AddCheck("R2", from.At, frame.Dist, _settings.OutletStraight,
+                                "R2: only " + Num(frame.Dist) + " mm of straight pipe from " + source + " to "
+                                + target + "; at least " + Num(_settings.OutletStraight) + " mm is required.");
+                        }
+
+                        continue;
+                    }
+
+                    List<Link> forward = new List<Link>();
+                    foreach (Link link in LinksOf(links, frame.Node))
+                    {
+                        if (link.Pipe && link.To != frame.From)
+                            forward.Add(link);
+                    }
+
+                    if (forward.Count == 0)
+                        continue;
+
+                    bool straight = frame.Straight;
+                    if (straight && frame.Node != outlet)
+                    {
+                        string change = null;
+                        if (forward.Count >= 2)
+                            change = "the junction at " + At(here);
+                        else if (IsBend(frame.Prev, here, _nodes[forward[0].To].P))
+                            change = "the bend at " + At(here);
+
+                        if (change != null)
+                        {
+                            AddCheck("R2", from.At, frame.Dist, _settings.OutletStraight,
+                                "R2: only " + Num(frame.Dist) + " mm of straight pipe from " + source + " to "
+                                + change + "; at least " + Num(_settings.OutletStraight) + " mm is required.");
+                            straight = false;
+                        }
+                    }
+
+                    foreach (Link link in forward)
+                    {
+                        stack.Push(new Frame
+                        {
+                            Node = link.To,
+                            From = frame.Node,
+                            Dist = frame.Dist + link.Length,
+                            Straight = straight,
+                            Prev = here
+                        });
+                    }
+                }
+            }
+
+            // R3: the pipe length from the inlet of the first refnet (the nearest the root) to the farthest
+            // pipe end that is not the root. Every such end counts as an indoor unit. Warning only.
+            private void CheckUnitRun(Dictionary<int, List<Link>> links, List<RuleRefnet> refnets)
+            {
+                int root = Resolve(_root);
+                Dictionary<int, double> fromRoot = new Dictionary<int, double>();
+                Dictionary<int, int> parent = new Dictionary<int, int>();
+                Stack<int> stack = new Stack<int>();
+                fromRoot[root] = 0;
+                parent[root] = -1;
+                stack.Push(root);
+                while (stack.Count > 0)
+                {
+                    int node = stack.Pop();
+                    foreach (Link link in LinksOf(links, node))
+                    {
+                        if (fromRoot.ContainsKey(link.To))
+                            continue;
+                        fromRoot[link.To] = fromRoot[node] + link.Length;
+                        parent[link.To] = node;
+                        stack.Push(link.To);
+                    }
+                }
+
+                RuleRefnet first = null;
+                double firstDistance = double.MaxValue;
+                foreach (RuleRefnet refnet in refnets)
+                {
+                    double distance;
+                    if (fromRoot.TryGetValue(refnet.Inlet, out distance) && distance < firstDistance)
+                    {
+                        first = refnet;
+                        firstDistance = distance;
+                    }
+                }
+
+                if (first == null)
+                    return;
+
+                _result.FirstRefnetInlet = _nodes[first.Inlet].P;
+
+                Dictionary<int, double> down = new Dictionary<int, double>();
+                HashSet<int> seen = new HashSet<int> { parent[first.Inlet], first.Inlet };
+                down[first.Inlet] = 0;
+                stack.Push(first.Inlet);
+                int farthest = -1;
+                double farthestDistance = -1;
+                while (stack.Count > 0)
+                {
+                    int node = stack.Pop();
+                    int pipes = 0;
+                    int bodies = 0;
+                    foreach (Link link in LinksOf(links, node))
+                    {
+                        if (link.Pipe)
+                            pipes++;
+                        else
+                            bodies++;
+                        if (seen.Add(link.To))
+                        {
+                            down[link.To] = down[node] + link.Length;
+                            stack.Push(link.To);
+                        }
+                    }
+
+                    if (node != first.Inlet && node != root && pipes == 1 && bodies == 0
+                        && down[node] > farthestDistance)
+                    {
+                        farthest = node;
+                        farthestDistance = down[node];
+                    }
+                }
+
+                if (farthest < 0)
+                    return;
+
+                Vec2 unit = _nodes[farthest].P;
+                _result.FarthestUnit = unit;
+                _result.FarthestUnitDistance = farthestDistance;
+
+                double warnAbove = _settings.MaxUnitRun - _settings.RunAllowance;
+                string message = null;
+                if (farthestDistance > _settings.MaxUnitRun + 1e-6)
+                {
+                    message = "R3: the farthest indoor unit, the pipe end at " + At(unit) + ", is "
+                        + Metres(farthestDistance) + " m of pipe from the inlet of the first refnet: over the "
+                        + Metres(_settings.MaxUnitRun) + " m limit.";
+                }
+                else if (farthestDistance > warnAbove + 1e-6)
+                {
+                    message = "R3: the farthest indoor unit, the pipe end at " + At(unit) + ", is "
+                        + Metres(farthestDistance) + " m of pipe from the inlet of the first refnet: over "
+                        + Metres(warnAbove) + " m (the " + Metres(_settings.MaxUnitRun) + " m limit less a "
+                        + Metres(_settings.RunAllowance) + " m construction allowance).";
+                }
+
+                _result.RuleChecks.Add(new RuleCheck
+                {
+                    Rule = "R3",
+                    At = unit,
+                    Measured = farthestDistance,
+                    Required = warnAbove,
+                    Passed = message == null,
+                    Message = message
+                });
+                if (message != null)
+                {
+                    _result.Warnings.Add(message);
+                    _result.WarningPoints.Add(unit);
+                }
             }
 
             // ------------------------------------------------------------------ output paths
