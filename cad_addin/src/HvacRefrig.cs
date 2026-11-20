@@ -13,11 +13,15 @@ namespace HvacAiCadAddin.Commands
 {
     // HVACREFRIG: cleans a rough refrigerant LINE/LWPOLYLINE network (weld, orthogonalise, collapse
     // jogs, merge collinear pipes) and puts a Branch Connection (1) refnet at each branch, set back from
-    // the T node. This class only prompts and previews; RefrigCleaner (AutoCAD-free) does the work and
-    // RefrigWriter writes the result in one transaction. It reports the refnet piping rules (R1, R2, R3)
-    // as warnings, before the confirmation and again in the summary. It does not size pipes: use
-    // HVACPIPESIZE with the RP layers.
-    // See AGENTS.md, "HVACREFRIG: clean up a rough refrigerant network".
+    // the T node. With "Size pipes" on (the default) it then sizes the pipes by the Daikin VRV IV tables:
+    // the capacity of each indoor unit is read from the drawing (xdata of an earlier run, a block name
+    // with "x kW", or an HVAC-NAME OF EQUIPMENTS label), SizingForm shows the units and the pipe
+    // segments, and on Apply each segment goes on its EIA_1 RP layer with a %%C<gas>/<liquid> label.
+    // This class only prompts and previews; RefrigCleaner, NetworkTopologyBuilder and RefrigSizer
+    // (AutoCAD-free) do the work, RefrigCapacityReader reads the capacities, and RefrigWriter and
+    // RefrigSizeWriter write the result in one transaction. It reports the refnet piping rules (R1, R2,
+    // R3) as warnings, before the confirmation and again in the summary.
+    // See AGENTS.md, "HVACREFRIG: clean up a rough refrigerant network" and "Pipe sizing".
     public class HvacRefrigCommand
     {
         [CommandMethod("HVACREFRIG", CommandFlags.UsePickSet)]
@@ -103,6 +107,7 @@ namespace HvacAiCadAddin.Commands
                 : settings.BaseAngleDegrees * Math.PI / 180.0;
 
             // 4. Clean.
+            List<ExistingRefnet> existing = RefrigWriter.FindRefnets(db);
             RefrigInput input = new RefrigInput
             {
                 Curves = sources.ConvertAll(s => s.Curve),
@@ -110,7 +115,7 @@ namespace HvacAiCadAddin.Commands
                 BaseAngle = baseAngle,
                 RootPoint = new Vec2(root.X, root.Y),
                 RootTolerance = Math.Max(PipeTransients.ViewSize() / 20.0, settings.WeldTolerance * 3),
-                ExistingRefnetPorts = RefrigWriter.FindRefnetPorts(db)
+                ExistingRefnetPorts = RefrigWriter.PortsOf(existing)
             };
             RefrigResult result = RefrigCleaner.Run(input);
             double elevation = sources[0].Curve.Elevation;
@@ -127,10 +132,19 @@ namespace HvacAiCadAddin.Commands
 
             WriteRules(editor, result, settings);
 
-            if (!result.Changed)
+            // With sizing on, the command goes on even when the network is already clean.
+            NetworkTopology topology = settings.SizePipes ? BuildTopology(editor, result, settings, existing) : null;
+
+            if (topology == null && !result.Changed)
             {
                 editor.WriteMessage("\nThe network is already clean and needs no refnets: nothing was changed.");
                 MarkProblems(editor, CirclePoints(result), elevation, 2);
+                return;
+            }
+
+            if (topology != null)
+            {
+                SizeAndWrite(document, sources, result, settings, topology, existing, elevation);
                 return;
             }
 
@@ -179,6 +193,229 @@ namespace HvacAiCadAddin.Commands
                 WriteWarningSummary(editor, result);
             }
         }
+
+        // ------------------------------------------------------------------ sizing
+
+        // The pipe tree from the root, through the new and the existing refnets. Null when sizing cannot go on.
+        private static NetworkTopology BuildTopology(
+            Editor editor, RefrigResult result, RefrigSettings settings, IList<ExistingRefnet> existing)
+        {
+            if (!result.HasRoot)
+                return null;
+
+            List<RefnetPortGroup> groups = new List<RefnetPortGroup>();
+            foreach (ExistingRefnet refnet in existing)
+                groups.Add(refnet.Ports);
+
+            NetworkTopology topology = NetworkTopologyBuilder.Build(new TopologyInput
+            {
+                Paths = result.Paths,
+                PlannedRefnets = result.Refnets,
+                ExistingRefnets = groups,
+                Root = result.Root,
+                Tolerance = settings.WeldTolerance
+            });
+            if (!topology.Ok)
+            {
+                editor.WriteMessage("\nPipe sizing skipped: " + topology.Error);
+                return null;
+            }
+
+            foreach (string warning in topology.Warnings)
+                editor.WriteMessage("\nWarning: " + warning);
+            return topology;
+        }
+
+        // Sizing: read the capacities, show the dialog, and on Apply write the cleaned and sized network.
+        // Cancel in the dialog writes nothing.
+        private static void SizeAndWrite(
+            Document document,
+            List<PipeSource> sources,
+            RefrigResult result,
+            RefrigSettings settings,
+            NetworkTopology topology,
+            IList<ExistingRefnet> existing,
+            double elevation)
+        {
+            Database db = document.Database;
+            Editor editor = document.Editor;
+
+            List<Vec2> endPoints = topology.Ends.ConvertAll(e => e.Point);
+            UnitReading[] readings = RefrigCapacityReader.Read(
+                db, sources, endPoints, settings.WeldTolerance, settings.LabelSearchRadius);
+            int read = 0;
+            foreach (UnitReading reading in readings)
+            {
+                if (reading != null)
+                    read++;
+            }
+
+            editor.WriteMessage(
+                "\n{0} indoor unit(s) found; a capacity was read for {1}.", endPoints.Count, read);
+
+            List<string> dialogWarnings = new List<string>(result.Warnings);
+            dialogWarnings.AddRange(topology.Warnings);
+
+            string applyNote = result.Changed
+                ? string.Format(
+                    CultureInfo.InvariantCulture,
+                    "Apply also cleans the network: {0} pipe run(s) and {1} new refnet(s) are written, "
+                    + "{2} joint(s) moved. Cancel writes nothing.",
+                    result.Paths.Count, result.Refnets.Count, result.NodesMoved)
+                : "The network is already clean. Apply rewrites the pipes on their size layers. Cancel writes nothing.";
+
+            RefrigSizingOutcome outcome;
+            using (RefrigSizingSession session = new RefrigSizingSession(
+                editor, topology, result, readings, dialogWarnings, elevation))
+            {
+                outcome = session.Run(applyNote);
+            }
+
+            if (outcome == null)
+            {
+                editor.WriteMessage("\nCancelled: nothing was changed.");
+                return;
+            }
+
+            ObjectId refnetBlock = ObjectId.Null;
+            using (PipeTemplateHolder template = new PipeTemplateHolder(editor))
+            {
+                string error;
+                string note;
+
+                // Every size layer, and the refnet block, must be in the drawing before the write.
+                HashSet<string> done = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (SegmentSizing row in outcome.Result.Segments)
+                {
+                    if (!row.HasChosen || !done.Add(row.ChosenText))
+                        continue;
+                    string layerName;
+                    if (!PipeDrawingLibrary.EnsureLayer(
+                        db, PipeKind.Refrigerant, row.ChosenText, template.Open, out layerName, out note, out error))
+                    {
+                        editor.WriteMessage("\n" + error + " Nothing was changed.");
+                        return;
+                    }
+
+                    if (note != null)
+                        editor.WriteMessage("\n" + note);
+                }
+
+                if (result.Refnets.Count > 0)
+                {
+                    if (!RefrigWriter.EnsureRefnetBlock(db, template.Open, out refnetBlock, out note, out error))
+                    {
+                        editor.WriteMessage("\n" + error + " Nothing was changed.");
+                        return;
+                    }
+
+                    if (note != null)
+                        editor.WriteMessage("\n" + note);
+                }
+
+                SizedWriteOptions options = new SizedWriteOptions
+                {
+                    WriteLabels = settings.WriteLabels,
+                    LabelHeight = settings.LabelHeight,
+                    ExistingRefnets = existing
+                };
+                if (settings.WriteLabels)
+                {
+                    if (PipeDrawingLibrary.EnsureNamedLayer(
+                        db, RefrigSizeWriter.TemplateLabelLayer, template.Open, out note, out error))
+                    {
+                        options.LabelLayer = RefrigSizeWriter.TemplateLabelLayer;
+                        if (note != null)
+                            editor.WriteMessage("\n" + note);
+                        options.LabelStyle = PipeDrawingLibrary.FindTextStyle(db, RefrigSizeWriter.TemplateLabelStyle);
+                        if (options.LabelStyle.IsNull)
+                        {
+                            editor.WriteMessage(
+                                "\nText style {0} is not in the drawing: the labels use the current style.",
+                                RefrigSizeWriter.TemplateLabelStyle);
+                        }
+                    }
+                    else
+                    {
+                        editor.WriteMessage("\n" + error + " The size labels were not written.");
+                    }
+                }
+
+                WriteSummary written;
+                if (!RefrigSizeWriter.Write(
+                    db, sources, result, topology, outcome.Result, outcome.UnitIndexes, outcome.UnitKw,
+                    refnetBlock, options, out written, out error))
+                {
+                    editor.WriteMessage("\n" + error + " Nothing was changed.");
+                    return;
+                }
+
+                editor.WriteMessage(
+                    "\nWrote {0} polyline(s) ({1} sized) and {2} new refnet(s), replacing {3} original curve(s).",
+                    written.Paths, written.Sized, written.Refnets, written.Erased);
+                if (written.RefnetsRelayered > 0)
+                {
+                    editor.WriteMessage(
+                        "\n{0} existing refnet(s) moved onto their inlet pipe's layer.", written.RefnetsRelayered);
+                }
+
+                if (settings.WriteLabels && options.LabelLayer != null)
+                {
+                    editor.WriteMessage(
+                        "\nSize labels: {0} written (height {1} mm), {2} of an earlier run replaced.",
+                        written.Labels,
+                        settings.LabelHeight.ToString("0.###", CultureInfo.InvariantCulture),
+                        written.LabelsRemoved);
+                    if (written.LabelsLocked > 0)
+                    {
+                        editor.WriteMessage(
+                            "\n{0} earlier label(s) on a locked layer were left in place.", written.LabelsLocked);
+                    }
+                }
+
+                WriteSizingSummary(editor, outcome.Result);
+                editor.WriteMessage(
+                    "\nJoints moved: {0}. Collinear nodes merged: {1}. Jogs merged: {2}. Zero-length pipes removed: {3}. "
+                    + "Duplicate pipes removed: {4}.",
+                    result.NodesMoved, result.NodesDissolved, result.JogsMerged, result.ZeroLengthRemoved,
+                    result.DuplicatesRemoved);
+                if (result.Reports.Count > 0)
+                    editor.WriteMessage("\n{0} case(s) were reported above and left unchanged.", result.Reports.Count);
+                WriteWarningSummary(editor, result);
+                foreach (string warning in outcome.Result.Warnings)
+                    editor.WriteMessage("\nWarning: " + warning);
+            }
+        }
+
+        // The outdoor unit, one line per segment, and the refnet kits.
+        private static void WriteSizingSummary(Editor editor, SizingResult sizing)
+        {
+            editor.WriteMessage(
+                "\nOutdoor unit {0} HP{1} (index {2}); indoor total {3}; connection {4} %.",
+                sizing.Hp,
+                sizing.HpIsDefault ? " (automatic)" : "",
+                sizing.OduIndex,
+                sizing.SumIndex,
+                sizing.Ratio.ToString("0", CultureInfo.InvariantCulture));
+            foreach (SegmentSizing row in sizing.Segments)
+            {
+                string kind = row.Kind == SegmentKind.Main
+                    ? "main"
+                    : row.Kind == SegmentKind.ToUnit ? "to unit" : "between refnets";
+                editor.WriteMessage(
+                    "\n  S{0} {1}: total {2}, {3}{4}",
+                    row.Index + 1,
+                    kind,
+                    row.TotalIndex,
+                    row.Chosen,
+                    row.Manual ? " (set by hand)" : "");
+            }
+
+            foreach (RefnetKit kit in sizing.Kits)
+                editor.WriteMessage("\n  R{0}: kit {1} (total {2}).", kit.Refnet + 1, kit.Kit, kit.TotalIndex);
+        }
+
+        // ------------------------------------------------------------------ rules and preview
 
         // The R3 distance (when there is a refnet) and every rule warning, one line each.
         private static void WriteRules(Editor editor, RefrigResult result, RefrigSettings settings)
