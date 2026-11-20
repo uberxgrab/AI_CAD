@@ -57,7 +57,8 @@ namespace HvacAiCadAddin.Commands
     }
 
     /// <summary>
-    /// HVACREFRIG dialog: the cleaning tolerances, the refnet scale, the refnet piping rules (R1, R2, R3)
+    /// HVACREFRIG dialog: the cleaning tolerances, the refnet scale, the refnet piping rules (R1, R2, R3),
+    /// the pipe sizing options (size pipes, size labels and their text height, the capacity search radius)
     /// and the base angle. The last accepted values are remembered between runs.
     /// </summary>
     public sealed class RefrigSettingsForm : Form
@@ -74,6 +75,10 @@ namespace HvacAiCadAddin.Commands
         private readonly RadioButton ucsRadio = new RadioButton { Text = "UCS X axis", AutoSize = true };
         private readonly RadioButton customRadio = new RadioButton { Text = "Angle (degrees from world X)", AutoSize = true };
         private readonly TextBox baseAngleBox = new TextBox { Width = 90 };
+        private readonly CheckBox sizeCheck = new CheckBox { Text = "Size pipes", AutoSize = true };
+        private readonly CheckBox labelsCheck = new CheckBox { Text = "Write size labels", AutoSize = true };
+        private readonly TextBox labelHeightBox = new TextBox { Width = 90 };
+        private readonly TextBox radiusBox = new TextBox { Width = 90 };
         private readonly Label errorLabel = new Label();
 
         internal RefrigSettings Settings { get; private set; }
@@ -85,7 +90,7 @@ namespace HvacAiCadAddin.Commands
             Text = "HVACREFRIG: clean up a refrigerant network";
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(500, 500);
+            ClientSize = new Size(500, 640);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -121,6 +126,22 @@ namespace HvacAiCadAddin.Commands
             AddRow(main, "R2: straight pipe after an outlet, min (mm)", straightBox);
             AddRow(main, "R3: first refnet inlet to farthest unit, max (mm)", maxRunBox);
             AddRow(main, "R3: construction allowance, warn within (mm)", allowanceBox);
+
+            Label sizing = new Label
+            {
+                Text = "Pipe sizing (Daikin VRV IV)",
+                AutoSize = true,
+                Font = new Font(Font, FontStyle.Bold),
+                Margin = new Padding(3, 14, 3, 4)
+            };
+            main.Controls.Add(sizing);
+            main.SetColumnSpan(sizing, 2);
+            main.Controls.Add(sizeCheck);
+            main.SetColumnSpan(sizeCheck, 2);
+            main.Controls.Add(labelsCheck);
+            main.SetColumnSpan(labelsCheck, 2);
+            AddRow(main, "Label height (mm)", labelHeightBox);
+            AddRow(main, "Capacity search radius for labels (mm)", radiusBox);
 
             Label header = new Label
             {
@@ -173,8 +194,23 @@ namespace HvacAiCadAddin.Commands
             maxRunBox.Text = Format(last.MaxUnitRun);
             allowanceBox.Text = Format(last.RunAllowance);
             baseAngleBox.Text = Format(last.BaseAngleDegrees);
+            sizeCheck.Checked = last.SizePipes;
+            labelsCheck.Checked = last.WriteLabels;
+            labelHeightBox.Text = Format(last.LabelHeight);
+            radiusBox.Text = Format(last.LabelSearchRadius);
+            sizeCheck.CheckedChanged += (sender, args) => UpdateSizingControls();
+            labelsCheck.CheckedChanged += (sender, args) => UpdateSizingControls();
+            UpdateSizingControls();
             ucsRadio.Checked = last.UseUcsBaseAngle;
             customRadio.Checked = !last.UseUcsBaseAngle;
+        }
+
+        // The label options only matter while pipes are sized (labels) or labels are written (height).
+        private void UpdateSizingControls()
+        {
+            labelsCheck.Enabled = sizeCheck.Checked;
+            labelHeightBox.Enabled = sizeCheck.Checked && labelsCheck.Checked;
+            radiusBox.Enabled = sizeCheck.Checked;
         }
 
         private static string Format(double value)
@@ -213,13 +249,17 @@ namespace HvacAiCadAddin.Commands
                 || !TryNumber(spacingBox.Text, out settings.RefnetSpacing)
                 || !TryNumber(straightBox.Text, out settings.OutletStraight)
                 || !TryNumber(maxRunBox.Text, out settings.MaxUnitRun)
-                || !TryNumber(allowanceBox.Text, out settings.RunAllowance))
+                || !TryNumber(allowanceBox.Text, out settings.RunAllowance)
+                || !TryNumber(labelHeightBox.Text, out settings.LabelHeight)
+                || !TryNumber(radiusBox.Text, out settings.LabelSearchRadius))
             {
                 errorLabel.Text = "Every value must be a number.";
                 return;
             }
 
             settings.UseUcsBaseAngle = ucsRadio.Checked;
+            settings.SizePipes = sizeCheck.Checked;
+            settings.WriteLabels = labelsCheck.Checked;
             if (!TryNumber(baseAngleBox.Text, out settings.BaseAngleDegrees))
             {
                 if (customRadio.Checked)
