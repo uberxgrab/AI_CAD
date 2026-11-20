@@ -87,6 +87,10 @@ namespace PipeCoreTests
                 Check.Near("R3 longest run to an indoor unit", 40000, s.MaxUnitRun);
                 Check.Near("R3 construction allowance", 3000, s.RunAllowance);
                 Check.True("UCS X", s.UseUcsBaseAngle);
+                Check.True("size pipes is on", s.SizePipes);
+                Check.True("size labels are on", s.WriteLabels);
+                Check.Near("label height", 150, s.LabelHeight);
+                Check.Near("capacity search radius", 1500, s.LabelSearchRadius);
                 string error;
                 Check.True("valid", s.IsValid(out error));
                 Check.Equal("block name", "Branch Connection (1)", RefrigSettings.RefnetBlockName);
@@ -111,7 +115,11 @@ namespace PipeCoreTests
                     RefnetSpacing = 1250.5,
                     OutletStraight = 600,
                     MaxUnitRun = 45000,
-                    RunAllowance = 2500
+                    RunAllowance = 2500,
+                    SizePipes = false,
+                    WriteLabels = false,
+                    LabelHeight = 187.5,
+                    LabelSearchRadius = 2250.5
                 };
                 RefrigSettings back = RefrigSettings.Deserialize(s.Serialize());
                 Check.Near("weld", 35.5, back.WeldTolerance);
@@ -125,6 +133,11 @@ namespace PipeCoreTests
                 Check.Near("R2", 600, back.OutletStraight);
                 Check.Near("R3 limit", 45000, back.MaxUnitRun);
                 Check.Near("R3 allowance", 2500, back.RunAllowance);
+                Check.False("size pipes off is remembered", back.SizePipes);
+                Check.False("size labels off is remembered", back.WriteLabels);
+                Check.Near("label height", 187.5, back.LabelHeight);
+                Check.Near("capacity search radius", 2250.5, back.LabelSearchRadius);
+                Check.Contains("label height is written with a point", s.Serialize(), "labelHeight=187.5");
                 Check.Contains("scale is written with a point", s.Serialize(), "scale=1.35");
                 Check.Contains("R1 is written with a point", s.Serialize(), "spacing=1250.5");
 
@@ -132,6 +145,10 @@ namespace PipeCoreTests
                 Check.Near("a file from before the rules keeps the R1 default", 1000, old.RefnetSpacing);
                 Check.Near("a file from before the rules keeps the R3 default", 40000, old.MaxUnitRun);
                 Check.Near("and its own values", 40, old.WeldTolerance);
+                Check.True("a file from before sizing keeps sizing on", old.SizePipes);
+                Check.True("and the labels on", old.WriteLabels);
+                Check.Near("and the 150 mm label height", 150, old.LabelHeight);
+                Check.Near("and the 1500 mm search radius", 1500, old.LabelSearchRadius);
             });
         }
 
@@ -180,6 +197,10 @@ namespace PipeCoreTests
             Invalid("NaN R3 limit", s => s.MaxUnitRun = double.NaN, "longest run");
             Invalid("allowance as big as the limit", s => s.RunAllowance = 40000, "allowance");
             Invalid("negative allowance", s => s.RunAllowance = -5, "allowance");
+            Invalid("zero label height", s => s.LabelHeight = 0, "label height");
+            Invalid("negative label height", s => s.LabelHeight = -150, "label height");
+            Invalid("NaN label height", s => s.LabelHeight = double.NaN, "label height");
+            Invalid("zero search radius", s => s.LabelSearchRadius = 0, "search radius");
 
             Check.Case("edge values are valid", () =>
             {

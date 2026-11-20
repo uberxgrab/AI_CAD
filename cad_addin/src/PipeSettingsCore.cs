@@ -153,6 +153,18 @@ namespace HvacAiCadAddin.Pipes
         public bool UseUcsBaseAngle = true;
         public double BaseAngleDegrees = 0;
 
+        /// <summary>True: after cleaning, size the pipes (Daikin VRV IV tables) and move them onto the RP layers.</summary>
+        public bool SizePipes = true;
+
+        /// <summary>True: write a <c>%%C&lt;gas&gt;/&lt;liquid&gt;</c> label on each sized segment.</summary>
+        public bool WriteLabels = true;
+
+        /// <summary>Text height of the size labels (mm). The label sits this far to the side of the pipe.</summary>
+        public double LabelHeight = 150;
+
+        /// <summary>How far from a pipe end an equipment label may be to give that unit its capacity (mm).</summary>
+        public double LabelSearchRadius = 1500;
+
         public bool IsValid(out string error)
         {
             error = null;
@@ -177,6 +189,10 @@ namespace HvacAiCadAddin.Pipes
                 error = "The longest run to an indoor unit (R3) must be above 0.";
             else if (!Finite(RunAllowance) || RunAllowance < 0 || RunAllowance >= MaxUnitRun)
                 error = "The R3 allowance must be 0 or more and less than the longest run.";
+            else if (!Finite(LabelHeight) || LabelHeight <= 0 || LabelHeight > 100000)
+                error = "The label height must be above 0.";
+            else if (!Finite(LabelSearchRadius) || LabelSearchRadius <= 0 || LabelSearchRadius > 1000000)
+                error = "The capacity search radius must be above 0.";
             return error == null;
         }
 
@@ -199,6 +215,10 @@ namespace HvacAiCadAddin.Pipes
             PipeSizeSettings.Add(text, "straight", PipeSizeSettings.Num(OutletStraight));
             PipeSizeSettings.Add(text, "maxrun", PipeSizeSettings.Num(MaxUnitRun));
             PipeSizeSettings.Add(text, "allowance", PipeSizeSettings.Num(RunAllowance));
+            PipeSizeSettings.Add(text, "sizePipes", SizePipes ? "1" : "0");
+            PipeSizeSettings.Add(text, "labels", WriteLabels ? "1" : "0");
+            PipeSizeSettings.Add(text, "labelHeight", PipeSizeSettings.Num(LabelHeight));
+            PipeSizeSettings.Add(text, "labelRadius", PipeSizeSettings.Num(LabelSearchRadius));
             return text.ToString();
         }
 
@@ -230,6 +250,10 @@ namespace HvacAiCadAddin.Pipes
                     case "straight": if (isNumber) settings.OutletStraight = number; break;
                     case "maxrun": if (isNumber) settings.MaxUnitRun = number; break;
                     case "allowance": if (isNumber) settings.RunAllowance = number; break;
+                    case "sizePipes": settings.SizePipes = value != "0"; break;
+                    case "labels": settings.WriteLabels = value != "0"; break;
+                    case "labelHeight": if (isNumber) settings.LabelHeight = number; break;
+                    case "labelRadius": if (isNumber) settings.LabelSearchRadius = number; break;
                 }
             }
 

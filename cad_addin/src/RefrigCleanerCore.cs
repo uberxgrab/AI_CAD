@@ -113,6 +113,10 @@ namespace HvacAiCadAddin.Pipes
         public Vec2 FarthestUnit;
         public Vec2 FirstRefnetInlet;
 
+        /// <summary>True when a root was given and found; <see cref="Root"/> is then the pipe end it resolved to.</summary>
+        public bool HasRoot;
+        public Vec2 Root;
+
         /// <summary>False when the network is already clean and no refnet is due: nothing to write.</summary>
         public bool Changed;
         public int Components;
@@ -457,7 +461,12 @@ namespace HvacAiCadAddin.Pipes
                 CountMoved();
 
                 if (_input.RootPoint.HasValue)
+                {
+                    // Anchors never move, so the root is still the pipe end that was found.
+                    _result.HasRoot = true;
+                    _result.Root = _nodes[Resolve(_root)].P;
                     PlaceRefnets();
+                }
 
                 BuildPaths();
                 _result.Changed = _weldMoved

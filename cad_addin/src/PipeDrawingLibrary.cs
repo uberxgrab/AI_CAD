@@ -165,6 +165,53 @@ namespace HvacAiCadAddin.Pipes
             return CreateWaterLayer(db, source, kind, sizeText, layerName, out note, out error);
         }
 
+        /// <summary>
+        /// Makes sure a layer exists by its exact name, importing it from the template when the drawing
+        /// does not have it. Call with no transaction open. <paramref name="note"/> says when it was imported.
+        /// </summary>
+        internal static bool EnsureNamedLayer(
+            Database db,
+            string layerName,
+            Func<TemplateSource> template,
+            out string note,
+            out string error)
+        {
+            note = null;
+            error = null;
+            if (LayerExists(db, layerName))
+                return true;
+
+            TemplateSource source = template == null ? null : template();
+            if (source == null)
+            {
+                error = "Layer '" + layerName + "' is not in the drawing and the template is unavailable.";
+                return false;
+            }
+
+            List<string> missing;
+            source.ImportLayers(db, new[] { layerName }, out missing);
+            if (missing.Count > 0)
+            {
+                error = "Layer '" + layerName + "' is in neither the drawing nor the template.";
+                return false;
+            }
+
+            note = "Imported layer " + layerName + " from the template.";
+            return true;
+        }
+
+        /// <summary>The id of a text style by name, or ObjectId.Null when the drawing has none of that name.</summary>
+        internal static ObjectId FindTextStyle(Database db, string styleName)
+        {
+            using (Transaction transaction = db.TransactionManager.StartTransaction())
+            {
+                TextStyleTable table = (TextStyleTable)transaction.GetObject(db.TextStyleTableId, OpenMode.ForRead);
+                ObjectId id = table.Has(styleName) ? table[styleName] : ObjectId.Null;
+                transaction.Commit();
+                return id;
+            }
+        }
+
         private static bool CreateWaterLayer(
             Database db,
             TemplateSource template,
