@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy to aitools_config.json (same folder) and edit. Keys starting with _ are ignored.",
+  "_work_dir": "Cache, converted DXFs, renders, logs. Default %LOCALAPPDATA%\HvacAiCad\work",
+  "work_dir": null,
+  "_drawing_dirs": "Folders searched for DWG/DXF by file name; relative to the repo root.",
+  "drawing_dirs": ["CAD"],
+  "_privacy": "normal | redact (client texts masked) | numbers_only (no texts, no images). A tool call may only ask for a stricter level than this.",
+  "privacy": "normal",
+  "_acad_order": "AutoCAD versions tried for DWG to DXF with accoreconsole, first installed wins.",
+  "acad_order": ["2023", "2021", "2024"],
+  "convert_timeout_s": 900,
+  "profile_timeout_s": 600,
+  "max_block_depth": 8
+}

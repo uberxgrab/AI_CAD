@@ -9,3 +9,6 @@ cad_addin/.tmp_stretch_obj/
 # Python
 __pycache__/
 venv/
+
+# Per-machine AI tool settings (copy aitools_config.example.json)
+aitools_config.json
