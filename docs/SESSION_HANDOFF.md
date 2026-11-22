@@ -150,6 +150,11 @@ Agent con đang chạy dở **không** tiếp tục được trên máy khác; g
    chuỗi trong AutoCAD: tương đối ít lỗi, các lỗi còn lại chưa được liệt kê, người dùng
    muốn giải quyết khi có AI hỗ trợ (xem memory ai-mcp-integration, các phase 0–4 MCP).
    Vẫn chờ bảng W/m² của người dùng.
+   - 22/11: commit lên nhánh `hvac-room-chain` (chưa push, chưa gộp vào `main`). Thêm bằng
+     agent Sonnet chạy lần lượt: `HVACPLACEODU` (dàn nóng), `HVACRISER` (ống đứng nhiều
+     tầng), `HVACROUTEDRAFT` nối vào cổng dàn lạnh (vị trí cổng là GIẢ ĐỊNH, cần người dùng
+     xác nhận) và chế độ đi theo hành lang. Người dùng bỏ qua việc thêm cassette 2,2/8,0 kW.
+     Kế hoạch AI 4 phase: `docs/AI_MCP_PLAN.md`, chờ người dùng trả lời 4 câu hỏi.
 6. **Kế hoạch cũ chưa làm:** lệnh bóc van và bóc thiết bị qua attribute (tư liệu ở
    `AGENTS.md`); schema MEP chung; tính tải lạnh; dữ liệu lỗi có gán nhãn cho AI.
 

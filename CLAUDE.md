@@ -41,10 +41,12 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
     duct sources from `cad_addin/src/` and references only `acdbmgd`/`accoremgd`.
     `tests/PipeAcadTests` is planned but not written.
   - `tests/RoomsCoreTests/`, `tests/LoadCoreTests/`, `tests/UnitCoreTests/`,
-    `tests/RouteCoreTests/`: C# console tests for the AutoCAD-free cores of
-    `HVACROOMS`, `HVACLOAD`, `HVACPLACEUNITS` and `HVACROUTEDRAFT`. They link
-    `tests/PipeCoreTests/Check.cs`. Same rule. `tests/UnitCoreTests/Acad/` is a
-    headless accoreconsole test of the unit writer (no run script yet).
+    `tests/RouteCoreTests/`, `tests/OduRiserCoreTests/`: C# console tests for the
+    AutoCAD-free cores of `HVACROOMS`, `HVACLOAD`, `HVACPLACEUNITS`,
+    `HVACROUTEDRAFT`, `HVACPLACEODU` and `HVACRISER`. They link
+    `tests/PipeCoreTests/Check.cs`. Same rule. `tests/UnitCoreTests/Acad/` (no run
+    script yet) and `tests/OduRiserCoreTests/Acad/run-tests.ps1 -WorkDwg <copy>` are
+    headless accoreconsole tests of the writers.
   - `heat_load.py` + `heat_load_table.json`: the `HVACLOAD` back end. The W/m² values
     in the table are PLACEHOLDERS until the user sends their own table; all values,
     keywords and labels are read from the file.
@@ -63,6 +65,9 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
   - `start.scr`: `NETLOAD` script used when debugging.
 - `docs/SESSION_HANDOFF.md`: summary of past Claude sessions, user decisions, work
   in progress, and setup on a new machine. Read it when resuming work.
+- `docs/AI_MCP_PLAN.md`: the 4-phase plan for AI on top of the commands (MCP
+  server, add-in bridge, AI-assisted recognition with a data flywheel, ducts and
+  route ranking). Not started; it lists the decisions the user still has to make.
 - `.claude/agents/research.md`: read-only `research` subagent for AutoCAD .NET API,
   HVAC reference, and ezdxf questions. It treats this file as authoritative.
 
@@ -126,7 +131,9 @@ parser.load_dxf -> extract_entities      RawEntity
 
 | `HVACLOAD` | `cad_addin/src/HvacLoad.cs`, `LoadCore.cs`, `LoadWriter.cs`, `LoadSettingsForm.cs`; back end `heat_load.py` + `heat_load_table.json` | Area-based cooling load (user decision: area × W/m² by room type × safety factor, no detailed method). Reads `HVAC-ROOM` polylines; Python classifies each room from its name (WC, storage, technical, stair, balcony, shaft are not cooled) and computes kW; a grid dialog lets the user change types and W/m² (optionally saved back to the table); Python recomputes with the overrides. Writes xdata `HVACAI_LOAD` [1000 type][1040 W/m²][1040 kW][1040 safety] on each room, adds/replaces a "x.x kW" line in the room label, and writes `<drawing>_HVACLOAD.csv`. One undo group. Not yet run in AutoCAD. |
 | `HVACPLACEUNITS` | `cad_addin/src/HvacPlaceUnits.cs`, `UnitPlacementCore.cs`, `UnitPlacementWriter.cs`, `UnitPlacementForm.cs` | Chooses Daikin VRV cassettes per room from `HVACAI_LOAD` (smallest index covering the load within a 3% tolerance; above the largest allowed, default 16 kW, splits into equal units, max 6) and places them inside the room (pole of inaccessibility for one, slabs along the long axis for several; 600 mm wall clearance, 300 mm between units; rotation = dominant wall direction). Template blocks `FCU-CAS-<kW> kW` (indices 25-140; no 2.2/8.0 kW in the template; body 950 square, base point mid top edge, body centre at (0,-475)) on `EIA_1 MECHANICAL EQUIPMENT`, imported via `TemplateSource` or drawn as a fallback. Tags `HVACAI_PLACED` [1000 room id][1071 index][1040 kW][1070 n][1070 of]; a rerun replaces units of the same rooms. Writer verified headless; dialog and preview not. |
-| `HVACROUTEDRAFT` | `cad_addin/src/HvacRouteDraft.cs`, `RouteDraftCore.cs`, `RouteDraftWriter.cs`, `RouteDraftForm.cs` | Draws rough orthogonal trees from selected unit blocks (insertion points) to a picked target or the nearest `HVAC-ROOM` shaft (`[Shaft]`), on `HVAC-DRAFT-REFRIG`/`-DRAIN`/`-POWER` with xdata `HVACAI_DRAFT`, for the user to run `HVACREFRIG`/`HVACDRAIN`/`HVACPOWERWIRE` on. Best of a trunk-and-branches heuristic and a rectilinear Prim tree (ranked: target at an end, fewest 4-way crossings, fewest units mid-pipe, shortest). Walls are ignored; default stub 1500 mm so the refrigerant cleaner's refnet spacing is met. Core outputs pass `RefrigCleaner` and `NetworkTopologyBuilder` in tests; not run in AutoCAD. |
+| `HVACROUTEDRAFT` | `cad_addin/src/HvacRouteDraft.cs`, `RouteDraftCore.cs`, `RouteDraftWriter.cs`, `RouteDraftForm.cs` | Draws rough orthogonal trees from selected unit blocks to a picked target or the nearest `HVAC-ROOM` shaft (`[Shaft]`), on `HVAC-DRAFT-REFRIG`/`-DRAIN`/`-POWER` with xdata `HVACAI_DRAFT`, for the user to run `HVACREFRIG`/`HVACDRAIN`/`HVACPOWERWIRE` on. Leaves end at the unit's refrigerant / drain port: insertion + R(rot)·S(scale, mirroring)·offset per block-name pattern. The template cassettes show no ports, so the `FCU-CAS`/`IU-CAS` defaults (refrigerant (475,-300), drain (475,-650), leaving +X) are ASSUMPTIONS to check; the power wire and unknown blocks use the insertion point. Default mode "corridor" when rooms exist: Dijkstra on a cost grid (200 mm, coarsened to 120000 cells; corridor/shaft 1, room 5, outside 3, wall crossing 2, bend 2; corridors = `HVACAI_LOAD` type lobby or names hành lang/sảnh/corridor/lobby/hall), grown from a ≥1500 mm target stub, no 4-way joints, branch starts kept ~2 m apart for refnets. Units in one room often chain inside the room. Older modes (best of trunk-and-branches and rectilinear Prim) remain and are the fallback without rooms. Outputs pass `RefrigCleaner`/`NetworkTopologyBuilder` in tests (about 120 ms for 30 units). |
+| `HVACPLACEODU` | `cad_addin/src/HvacPlaceOdu.cs`, `OduCore.cs`, `OduWriter.cs`, `OduForm.cs` | Selects the indoor units of one VRV system (capacity from `HVACAI_PLACED`, a `n kW` block name or the `HVAC-NAME OF EQUIPMENTS` attribute), sums the Daikin indices and picks the outdoor HP with the existing `VrvTables` rules (smallest HP covering the total, ratio 50-130%). Above 54 HP (index 1350) it prints a balanced split proposal instead of splitting. Template blocks `ODU-6 HP`…`ODU-24 HP` (even HP only; nearest used with a warning; base point mid top edge) on `EIA_1 MECHANICAL EQUIPMENT`, with a label on `EIA_1 MECHANICAL EQUIPMENT ANNOTATIONS`. User picks the point (`Rotate90`); xdata `HVACAI_ODU` [1070 HP][1071 ODU index][1071 indoor index][1040 ratio %][1070 units]; `Replace` swaps an existing ODU. |
+| `HVACRISER` | `cad_addin/src/HvacRiser.cs`, `RiserCore.cs`, `RiserWriter.cs` | Multi-floor refrigerant riser: per floor (farthest from the ODU first) the user selects that floor's units, picks its riser point (or `[Shaft]`) and names it; then picks the ODU or types its HP. Cumulative index per riser segment, sizes from `VrvTables.BetweenRefnets` capped by the main pipe (`MainByHp`, up-size asked when the estimated 90 m equivalent length is reached; floor height 3600 mm assumed, settable), refnets `FirstKit`/`LaterKit`. Writes circle + MText markers on `HVAC-RISER` at each floor and a schedule Table, xdata `HVACAI_RISER`; rerun with the same riser name replaces. Each floor's horizontal network is then run through HVACREFRIG with its root at that floor's riser point. |
 
 `HVACQTO` classification:
 
@@ -160,7 +167,7 @@ parser.load_dxf -> extract_entities      RawEntity
 | Native STRETCH preview | Implemented; needs in-AutoCAD acceptance testing | AutoCAD owns the second-point prompt and its preview. `PointMonitor` previews eligible dynamic blocks at the same time. |
 | Quantity takeoff | Initial implementation | `HVACQTO` and `HVACCOUNT` exist. There is no common MEP object/quantity schema yet. |
 | Heat-load calculation | Area-based (`HVACLOAD`) | Area × W/m² × safety factor per room type; W/m² table is a placeholder pending the user's values. No envelope, orientation or design-condition model. |
-| Rooms → units → rough routes | `HVACROOMS` → `HVACLOAD` → `HVACPLACEUNITS` → `HVACROUTEDRAFT` → existing `HVACREFRIG`/`HVACDRAIN`/`HVACPOWERWIRE` | Each step is a separate command with preview and one undo group. The user tested the chain in AutoCAD on 2026-11-22 and found relatively few bugs; the remaining ones are not listed yet. |
+| Rooms → units → rough routes | `HVACROOMS` → `HVACLOAD` → `HVACPLACEUNITS` → `HVACPLACEODU` → `HVACROUTEDRAFT` → `HVACRISER` → existing `HVACREFRIG`/`HVACDRAIN`/`HVACPOWERWIRE` → `HVACQTO` | Each step is a separate command with preview and one undo group. The user tested the first four in AutoCAD on 2026-11-22 (relatively few bugs, not listed yet). `HVACPLACEODU`, `HVACRISER` and the port/corridor routing were added the same day and are not yet tested interactively. |
 | DXF validation / AI error detection | Rule-based foundation | Deterministic checks only. AI inference, labelled data, and CAD-facing review workflows are planned. |
 | Room extraction (tầng 0) | Prototype + `HVACROOMS` | Geometry only. Real-drawing limits: open-plan spaces merge (use `HVAC-ROOM-SPLIT`), openings wider than 1800 mm or single-line walls leak, the room name is the longest text inside. `DT. x M2` labels in the sample drawing are whole-unit areas, so they only roughly score rooms. |
 | Automated tests | Python, C# cores, headless duct | `tests/HvacQtoCoreTests/`, `tests/PipeCoreTests/`, `tests/DuctCoreTests/` and `tests/RoomsCoreTests/` cover the AutoCAD-free logic. `tests/DuctAcadTests/` runs non-interactive duct code in `accoreconsole`. Jigs, previews, osnap and picking have no automated tests, so commands must still be tested manually in AutoCAD. |
@@ -267,6 +274,7 @@ dotnet run --project tests\RoomsCoreTests\RoomsCoreTests.csproj -c Debug
 dotnet run --project tests\LoadCoreTests\LoadCoreTests.csproj -c Debug
 dotnet run --project tests\UnitCoreTests\UnitCoreTests.csproj -c Debug
 dotnet run --project tests\RouteCoreTests\RouteCoreTests.csproj -c Debug
+dotnet run --project tests\OduRiserCoreTests\OduRiserCoreTests.csproj -c Debug
 
 # Tầng 0: automatic prototype on a whole DXF, or the HVACROOMS back end on a request
 venv\Scripts\python.exe arch_extract.py --input plan.dxf --out-dir out\arch [--config c.json]
