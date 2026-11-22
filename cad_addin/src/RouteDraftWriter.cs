@@ -12,6 +12,9 @@ namespace HvacAiCadAddin.Routes
     {
         public string Kind;
         public RouteDraftResult Result;
+
+        /// <summary>The points the pipes end at (unit ports or insertion points), in unit order.</summary>
+        public List<Vec2> Points = new List<Vec2>();
     }
 
     // Writes the HVACROUTEDRAFT result in one transaction (one undo group): one LWPOLYLINE per tree piece

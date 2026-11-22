@@ -10,18 +10,32 @@ using HvacAiCadAddin.Ducts;
 using HvacAiCadAddin.Pipes;
 using HvacAiCadAddin.Rooms;
 using HvacAiCadAddin.Routes;
+using HvacAiCadAddin.Units;
 
 namespace HvacAiCadAddin.Commands
 {
     // HVACROUTEDRAFT: drafts rough orthogonal routes from the selected indoor units (block references) to
     // a target point (the riser or outdoor-unit connection, or the centre of a shaft found by HVACROOMS),
     // ready for HVACREFRIG, HVACDRAIN and HVACPOWERWIRE. Each draft is one connected tree of LWPOLYLINEs
-    // whose leaves touch the unit insertion points exactly and whose root is the target point. The trees
-    // are previewed as transient graphics; on Yes they are written on HVAC-DRAFT-REFRIG / -DRAIN / -POWER
-    // in one undo group, replacing earlier drafts of the same kind that touch these units. Walls are
-    // ignored: the user edits the draft before running the cleaner.
+    // whose leaves touch the unit connection ports exactly (the refrigerant port for the refrigerant draft,
+    // the drain port for the drain draft, the insertion point for the power wire or when the port mode is
+    // "insertion point" or the block has no port rule) and whose root is the target point. In the corridor
+    // mode the trees follow the corridor and lobby rooms (HVAC-ROOM polygons of HVACROOMS) and only enter a
+    // room for the last branch to a unit; the other modes ignore walls. The trees are previewed as
+    // transient graphics; on Yes they are written on HVAC-DRAFT-REFRIG / -DRAIN / -POWER in one undo
+    // group, replacing earlier drafts of the same kind that touch these units. The user edits the draft
+    // before running the cleaner.
     public class HvacRouteDraftCommand
     {
+        private sealed class UnitRef
+        {
+            public string BlockName = "";
+            public Vec2 Insertion;
+            public double Rotation;
+            public double ScaleX = 1;
+            public double ScaleY = 1;
+        }
+
         private sealed class Shaft
         {
             public string Name;
@@ -51,10 +65,11 @@ namespace HvacAiCadAddin.Commands
             Editor editor = document.Editor;
 
             // 1. The indoor units: the pickfirst set or a new selection, block references only.
-            List<Vec2> units = SelectUnits(editor, db);
+            List<UnitRef> units = SelectUnits(editor, db);
             if (units == null || units.Count == 0)
                 return;
-            Vec2 centroid = RouteDraftCore.Centroid(units);
+            List<Vec2> insertions = units.ConvertAll(u => u.Insertion);
+            Vec2 centroid = RouteDraftCore.Centroid(insertions);
 
             // 2. Settings.
             RouteDraftSettings settings;
@@ -78,15 +93,33 @@ namespace HvacAiCadAddin.Commands
                 && !PickTarget(editor, db, "Pick the power supply point", centroid, out powerTarget))
                 return;
 
-            // 4. Build the trees.
-            RouteDraftOptions options = RouteDraftOptions.From(settings);
+            // 4. Rooms for the corridor mode, then the trees.
+            List<RouteRoom> rooms = new List<RouteRoom>();
+            if (settings.Mode == RouteDraftSettings.ModeCorridor)
+            {
+                List<Vec2> around = new List<Vec2>(insertions);
+                around.Add(target);
+                if (settings.DrawDrain)
+                    around.Add(drainTarget);
+                if (settings.DrawPower)
+                    around.Add(powerTarget);
+                rooms = ReadRooms(editor, db, around, Math.Max(6000, settings.MinStub + 3000));
+                if (rooms.Count == 0)
+                    editor.WriteMessage("\nNo HVAC-ROOM polygons near the units (run HVACROOMS first): "
+                        + "the corridor mode falls back to the wall-blind trees.");
+                else
+                    editor.WriteMessage(string.Format(CultureInfo.InvariantCulture,
+                        "\nCorridor mode: {0} room polygon(s) near the units, {1} of them corridor or lobby.",
+                        rooms.Count, rooms.FindAll(r => r.Corridor).Count));
+            }
+
             List<RouteDraftSet> sets = new List<RouteDraftSet>();
             if (settings.DrawRefrig)
-                sets.Add(new RouteDraftSet { Kind = "refrig", Result = RouteDraftCore.Build(target, units, options) });
+                sets.Add(BuildSet(editor, "refrig", target, units, settings, rooms));
             if (settings.DrawDrain)
-                sets.Add(new RouteDraftSet { Kind = "drain", Result = RouteDraftCore.Build(drainTarget, units, options) });
+                sets.Add(BuildSet(editor, "drain", drainTarget, units, settings, rooms));
             if (settings.DrawPower)
-                sets.Add(new RouteDraftSet { Kind = "power", Result = RouteDraftCore.Build(powerTarget, units, options) });
+                sets.Add(BuildSet(editor, "power", powerTarget, units, settings, rooms));
 
             int pieces = 0;
             foreach (RouteDraftSet set in sets)
@@ -101,8 +134,10 @@ namespace HvacAiCadAddin.Commands
                 }
 
                 editor.WriteMessage(string.Format(CultureInfo.InvariantCulture,
-                    "\n{0}: {1} polyline(s), {2:0.0} m of pipe, farthest unit {3:0.0} m away ({4}).",
-                    Describe(set.Kind), r.Polylines.Count, r.TotalLength / 1000.0, farthest / 1000.0, r.ModeUsed));
+                    "\n{0}: {1} polyline(s), {2:0.0} m of pipe, farthest unit {3:0.0} m away ({4}{5}).",
+                    Describe(set.Kind), r.Polylines.Count, r.TotalLength / 1000.0, farthest / 1000.0, r.ModeUsed,
+                    r.CellSizeUsed > 0 ? string.Format(CultureInfo.InvariantCulture, ", {0:0} mm cells, cost {1:0}",
+                        r.CellSizeUsed, r.RouteCost) : ""));
                 foreach (string warning in r.Warnings)
                     editor.WriteMessage("\n  Warning: " + warning);
             }
@@ -125,8 +160,11 @@ namespace HvacAiCadAddin.Commands
                     preview.AddCircle(set.Result.Root, marker, 0, 2);
                 }
 
-                foreach (Vec2 u in units)
-                    preview.AddCircle(u, marker / 2, 0, 7);
+                foreach (RouteDraftSet set in sets)
+                {
+                    foreach (Vec2 u in set.Points)
+                        preview.AddCircle(u, marker / 2, 0, 7);
+                }
 
                 PromptKeywordOptions confirm = new PromptKeywordOptions(string.Format(
                     CultureInfo.InvariantCulture,
@@ -149,7 +187,11 @@ namespace HvacAiCadAddin.Commands
             // 6. Write (one undo group), replacing earlier drafts that touch these units.
             int written;
             int erased;
-            bool ok = RouteDraftWriter.Write(db, db.CurrentSpaceId, sets, units, EarlierDrafts(editor), out written, out erased);
+            // Earlier drafts that touch an insertion point or any port of these units are replaced.
+            List<Vec2> touch = new List<Vec2>(insertions);
+            foreach (RouteDraftSet set in sets)
+                touch.AddRange(set.Points);
+            bool ok = RouteDraftWriter.Write(db, db.CurrentSpaceId, sets, touch, EarlierDrafts(editor), out written, out erased);
             if (!ok)
             {
                 editor.WriteMessage("\nNothing was written.");
@@ -194,13 +236,13 @@ namespace HvacAiCadAddin.Commands
             }
         }
 
-        // The insertion points of the selected block references (the pickfirst set when it has any).
-        private static List<Vec2> SelectUnits(Editor editor, Database db)
+        // The selected block references (the pickfirst set when it has any).
+        private static List<UnitRef> SelectUnits(Editor editor, Database db)
         {
             PromptSelectionResult selection = editor.SelectImplied();
-            List<Vec2> units = selection.Status == PromptStatus.OK && selection.Value != null
-                ? InsertPoints(db, selection.Value.GetObjectIds(), editor)
-                : new List<Vec2>();
+            List<UnitRef> units = selection.Status == PromptStatus.OK && selection.Value != null
+                ? ReadUnits(db, selection.Value.GetObjectIds(), editor)
+                : new List<UnitRef>();
             if (units.Count > 0)
                 return units;
 
@@ -212,15 +254,15 @@ namespace HvacAiCadAddin.Commands
             selection = editor.GetSelection(options, filter);
             if (selection.Status != PromptStatus.OK)
                 return null;
-            units = InsertPoints(db, selection.Value.GetObjectIds(), editor);
+            units = ReadUnits(db, selection.Value.GetObjectIds(), editor);
             if (units.Count == 0)
                 editor.WriteMessage("\nNo blocks were selected.");
             return units;
         }
 
-        private static List<Vec2> InsertPoints(Database db, ObjectId[] ids, Editor editor)
+        private static List<UnitRef> ReadUnits(Database db, ObjectId[] ids, Editor editor)
         {
-            List<Vec2> points = new List<Vec2>();
+            List<UnitRef> units = new List<UnitRef>();
             int others = 0;
             using (Transaction transaction = db.TransactionManager.StartTransaction())
             {
@@ -233,7 +275,23 @@ namespace HvacAiCadAddin.Commands
                         continue;
                     }
 
-                    points.Add(new Vec2(block.Position.X, block.Position.Y));
+                    // A dynamic block's own name is anonymous (*U12); the template name is on its dynamic definition.
+                    string name = block.Name;
+                    if (block.IsDynamicBlock)
+                    {
+                        BlockTableRecord definition = transaction.GetObject(block.DynamicBlockTableRecord, OpenMode.ForRead) as BlockTableRecord;
+                        if (definition != null)
+                            name = definition.Name;
+                    }
+
+                    units.Add(new UnitRef
+                    {
+                        BlockName = name ?? "",
+                        Insertion = new Vec2(block.Position.X, block.Position.Y),
+                        Rotation = block.Rotation,
+                        ScaleX = block.ScaleFactors.X,
+                        ScaleY = block.ScaleFactors.Y
+                    });
                 }
 
                 transaction.Commit();
@@ -241,7 +299,147 @@ namespace HvacAiCadAddin.Commands
 
             if (others > 0)
                 editor.WriteMessage("\n{0} selected object(s) were not blocks and are left out.", others);
-            return points;
+            return units;
+        }
+
+        // The end points of the pipes of one kind: the unit's connection port (with the direction the pipe
+        // leaves it) when the port mode asks for it and the block has a rule, else the insertion point.
+        private static RouteDraftSet BuildSet(Editor editor, string kind, Vec2 target, List<UnitRef> units,
+            RouteDraftSettings settings, List<RouteRoom> rooms)
+        {
+            List<Vec2> points = new List<Vec2>();
+            List<Vec2> outs = new List<Vec2>();
+            int viaPort = 0;
+            SortedDictionary<string, int> missing = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (UnitRef u in units)
+            {
+                Vec2 point = u.Insertion;
+                Vec2 outward = new Vec2(0, 0);
+                bool wantsPort = settings.PortMode == RouteDraftSettings.PortsBlock && kind != "power";
+                PortRule rule = wantsPort ? RoutePorts.Find(settings.PortRules, u.BlockName) : null;
+                if (rule != null)
+                {
+                    bool drain = kind == "drain";
+                    RoutePorts.Resolve(u.Insertion, u.Rotation, u.ScaleX, u.ScaleY,
+                        drain ? rule.DrainX : rule.RefrigX, drain ? rule.DrainY : rule.RefrigY,
+                        drain ? rule.DrainDir : rule.RefrigDir, out point, out outward);
+                    viaPort++;
+                }
+                else if (wantsPort)
+                {
+                    int count;
+                    missing.TryGetValue(u.BlockName, out count);
+                    missing[u.BlockName] = count + 1;
+                }
+
+                points.Add(point);
+                outs.Add(outward);
+            }
+
+            if (kind != "power" && settings.PortMode == RouteDraftSettings.PortsBlock)
+            {
+                editor.WriteMessage("\n{0}: {1} of {2} unit(s) end at their {3} port.", Describe(kind), viaPort, units.Count,
+                    kind == "drain" ? "drain" : "refrigerant");
+                if (missing.Count > 0)
+                {
+                    List<string> names = new List<string>();
+                    foreach (KeyValuePair<string, int> pair in missing)
+                    {
+                        if (names.Count < 5)
+                            names.Add(pair.Key + " x" + pair.Value);
+                    }
+
+                    editor.WriteMessage("\n  No port rule for: {0}{1}; those end at the insertion point.",
+                        string.Join(", ", names), missing.Count > names.Count ? ", ..." : "");
+                }
+            }
+
+            RouteDraftOptions options = RouteDraftOptions.From(settings);
+            options.Rooms = rooms;
+            options.UnitOut = outs;
+            return new RouteDraftSet { Kind = kind, Points = points, Result = RouteDraftCore.Build(target, points, options) };
+        }
+
+        // HVAC-ROOM polygons (HVACAI_ROOM xdata) of the current space whose box meets the box around the points.
+        private static List<RouteRoom> ReadRooms(Editor editor, Database db, List<Vec2> around, double margin)
+        {
+            List<RouteRoom> rooms = new List<RouteRoom>();
+            double minX = double.MaxValue, minY = double.MaxValue, maxX = double.MinValue, maxY = double.MinValue;
+            foreach (Vec2 p in around)
+            {
+                minX = Math.Min(minX, p.X);
+                maxX = Math.Max(maxX, p.X);
+                minY = Math.Min(minY, p.Y);
+                maxY = Math.Max(maxY, p.Y);
+            }
+
+            minX -= margin;
+            minY -= margin;
+            maxX += margin;
+            maxY += margin;
+
+            SelectionFilter filter = new SelectionFilter(new[]
+            {
+                new TypedValue((int)DxfCode.ExtendedDataRegAppName, RoomsSettings.XDataApp),
+                new TypedValue((int)DxfCode.Start, "LWPOLYLINE")
+            });
+            PromptSelectionResult all = editor.SelectAll(filter);
+            if (all.Status != PromptStatus.OK || all.Value == null)
+                return rooms;
+
+            using (Transaction transaction = db.TransactionManager.StartTransaction())
+            {
+                foreach (ObjectId id in all.Value.GetObjectIds())
+                {
+                    Polyline polyline = transaction.GetObject(id, OpenMode.ForRead) as Polyline;
+                    if (polyline == null || polyline.IsErased || polyline.NumberOfVertices < 3)
+                        continue;
+
+                    RoomTags.RoomTag tag = RoomTags.ParseRoom(ReadXData(polyline, UnitSettings.RoomApp));
+                    if (tag == null)
+                        continue;
+                    RoomTags.LoadTag load = RoomTags.ParseLoad(ReadXData(polyline, UnitSettings.LoadApp));
+
+                    RouteRoom room = new RouteRoom
+                    {
+                        Name = tag.Name ?? "",
+                        Shaft = tag.IsShaft,
+                        Corridor = !tag.IsShaft && RouteRoom.IsCorridor(tag.Name, load != null ? load.RoomType : "")
+                    };
+                    double rx0 = double.MaxValue, ry0 = double.MaxValue, rx1 = double.MinValue, ry1 = double.MinValue;
+                    for (int i = 0; i < polyline.NumberOfVertices; i++)
+                    {
+                        Point2d p = polyline.GetPoint2dAt(i);
+                        room.Ring.Add(new Vec2(p.X, p.Y));
+                        rx0 = Math.Min(rx0, p.X);
+                        rx1 = Math.Max(rx1, p.X);
+                        ry0 = Math.Min(ry0, p.Y);
+                        ry1 = Math.Max(ry1, p.Y);
+                    }
+
+                    if (rx1 < minX || rx0 > maxX || ry1 < minY || ry0 > maxY)
+                        continue;
+                    rooms.Add(room);
+                }
+
+                transaction.Commit();
+            }
+
+            return rooms;
+        }
+
+        private static IList<object> ReadXData(Entity entity, string app)
+        {
+            List<object> values = new List<object>();
+            using (ResultBuffer buffer = entity.GetXDataForApplication(app))
+            {
+                if (buffer == null)
+                    return values;
+                foreach (TypedValue value in buffer)
+                    values.Add(value.Value);
+            }
+
+            return values;
         }
 
         // The target point, or the centre of the shaft nearest to the units when the user types Shaft.

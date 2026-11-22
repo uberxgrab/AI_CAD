@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -57,7 +58,9 @@ namespace HvacAiCadAddin.Commands
 
     /// <summary>
     /// HVACROUTEDRAFT dialog: which drafts to draw (refrigerant, drain, power wire), the tree mode, the
-    /// trunk axis and the shortest stub. The last accepted values are remembered between runs.
+    /// trunk axis and the shortest stub, the corridor costs, and where the pipes end on the unit blocks
+    /// (insertion point or connection port, with the port offsets per block-name pattern). The last
+    /// accepted values are remembered between runs.
     /// </summary>
     public sealed class RouteDraftForm : Form
     {
@@ -69,12 +72,26 @@ namespace HvacAiCadAddin.Commands
         private readonly ComboBox modeBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 230 };
         private readonly ComboBox axisBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 230 };
         private readonly TextBox stubBox = new TextBox { Width = 90 };
+        private readonly ComboBox portModeBox = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
+        private readonly TextBox cellBox = new TextBox { Width = 90 };
+        private readonly TextBox roomBox = new TextBox { Width = 90 };
+        private readonly TextBox outsideBox = new TextBox { Width = 90 };
+        private readonly TextBox boundaryBox = new TextBox { Width = 90 };
+        private readonly TextBox bendBox = new TextBox { Width = 90 };
+        private readonly DataGridView portGrid = new DataGridView();
         private readonly Label errorLabel = new Label();
 
         private static readonly string[] ModeValues =
         {
-            RouteDraftSettings.ModeBest, RouteDraftSettings.ModeTrunk, RouteDraftSettings.ModeMst
+            RouteDraftSettings.ModeCorridor, RouteDraftSettings.ModeBest, RouteDraftSettings.ModeTrunk, RouteDraftSettings.ModeMst
         };
+
+        private static readonly string[] PortModeValues =
+        {
+            RouteDraftSettings.PortsBlock, RouteDraftSettings.PortsInsertion
+        };
+
+        private static readonly string[] DirectionChoices = { "+X", "-X", "+Y", "-Y", "" };
 
         private static readonly string[] AxisValues =
         {
@@ -90,7 +107,7 @@ namespace HvacAiCadAddin.Commands
             Text = "HVACROUTEDRAFT: draft routes to the units";
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(520, 430);
+            ClientSize = new Size(600, 700);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
@@ -117,12 +134,39 @@ namespace HvacAiCadAddin.Commands
             AddHeader(main, "Route");
             modeBox.Items.AddRange(new object[]
             {
-                "Best of trunk and rectilinear tree", "Trunk with branches", "Rectilinear tree (L bends)"
+                "Along corridors (HVAC-ROOM polygons)", "Best of trunk and rectilinear tree", "Trunk with branches",
+                "Rectilinear tree (L bends)"
             });
             axisBox.Items.AddRange(new object[] { "Automatic", "Horizontal", "Vertical" });
             AddRow(main, "Tree mode", modeBox);
             AddRow(main, "Trunk direction", axisBox);
             AddRow(main, "Shortest stub at the target (mm)", stubBox);
+
+            AddHeader(main, "Corridor mode costs (corridor = 1 per cell)");
+            AddRow(main, "Cell size (mm)", cellBox);
+            AddRow(main, "Cell inside a room", roomBox);
+            AddRow(main, "Cell outside every room", outsideBox);
+            AddRow(main, "Each room wall crossed", boundaryBox);
+            AddRow(main, "Each bend", bendBox);
+
+            AddHeader(main, "Where the pipes end on a unit");
+            portModeBox.Items.AddRange(new object[] { "Connection port of the block (rules below)", "Insertion point" });
+            AddRow(main, "Pipe end", portModeBox);
+            Label portNote = new Label
+            {
+                Text = "Offsets are in the block's own coordinates (before scale, rotation and mirroring). The longest "
+                    + "matching block-name part wins; blocks without a rule end at the insertion point. The template "
+                    + "cassettes (FCU-CAS, body 950 x 950, origin at the middle of the top edge) have no connection "
+                    + "marks, so the default ports are assumed: both on the +X side. The power wire always ends at "
+                    + "the insertion point.",
+                AutoSize = false,
+                Width = 560,
+                Height = 78,
+                Margin = new Padding(3, 3, 3, 3)
+            };
+            AddWide(main, portNote);
+            ConfigurePortGrid();
+            AddWide(main, portGrid);
 
             Label note = new Label
             {
@@ -165,6 +209,18 @@ namespace HvacAiCadAddin.Commands
             drainTargetCheck.Checked = last.SeparateDrainTarget;
             powerTargetCheck.Checked = last.SeparatePowerTarget;
             modeBox.SelectedIndex = Math.Max(0, Array.IndexOf(ModeValues, last.Mode));
+            portModeBox.SelectedIndex = Math.Max(0, Array.IndexOf(PortModeValues, last.PortMode));
+            cellBox.Text = Num(last.CellSize);
+            roomBox.Text = Num(last.RoomPenalty);
+            outsideBox.Text = Num(last.OutsidePenalty);
+            boundaryBox.Text = Num(last.BoundaryPenalty);
+            bendBox.Text = Num(last.BendPenalty);
+            foreach (PortRule rule in last.PortRules)
+            {
+                portGrid.Rows.Add(rule.Pattern, Num(rule.RefrigX), Num(rule.RefrigY), rule.RefrigDir,
+                    Num(rule.DrainX), Num(rule.DrainY), rule.DrainDir);
+            }
+
             axisBox.SelectedIndex = Math.Max(0, Array.IndexOf(AxisValues, last.TrunkAxis));
             stubBox.Text = last.MinStub.ToString("0.###", CultureInfo.InvariantCulture);
             drainCheck.CheckedChanged += (sender, args) => UpdateControls();
@@ -177,7 +233,91 @@ namespace HvacAiCadAddin.Commands
         {
             drainTargetCheck.Enabled = drainCheck.Checked;
             powerTargetCheck.Enabled = powerCheck.Checked;
-            axisBox.Enabled = ModeValues[Math.Max(0, modeBox.SelectedIndex)] != RouteDraftSettings.ModeMst;
+            string mode = ModeValues[Math.Max(0, modeBox.SelectedIndex)];
+            axisBox.Enabled = mode != RouteDraftSettings.ModeMst && mode != RouteDraftSettings.ModeCorridor;
+            bool corridor = mode == RouteDraftSettings.ModeCorridor;
+            cellBox.Enabled = corridor;
+            roomBox.Enabled = corridor;
+            outsideBox.Enabled = corridor;
+            boundaryBox.Enabled = corridor;
+            bendBox.Enabled = corridor;
+        }
+
+        private static string Num(double value)
+        {
+            return value.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+
+        private void ConfigurePortGrid()
+        {
+            portGrid.Width = 560;
+            portGrid.Height = 130;
+            portGrid.AllowUserToAddRows = true;
+            portGrid.AllowUserToDeleteRows = true;
+            portGrid.RowHeadersVisible = false;
+            portGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            portGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Block name contains", FillWeight = 160 });
+            portGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Refrig. X", FillWeight = 70 });
+            portGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Refrig. Y", FillWeight = 70 });
+            portGrid.Columns.Add(DirectionColumn("Leaves"));
+            portGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Drain X", FillWeight = 70 });
+            portGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Drain Y", FillWeight = 70 });
+            portGrid.Columns.Add(DirectionColumn("Leaves"));
+        }
+
+        private static DataGridViewComboBoxColumn DirectionColumn(string header)
+        {
+            DataGridViewComboBoxColumn column = new DataGridViewComboBoxColumn { HeaderText = header, FillWeight = 60 };
+            column.Items.AddRange(DirectionChoices);
+            return column;
+        }
+
+        private static string CellText(DataGridViewRow row, int column)
+        {
+            object value = row.Cells[column].Value;
+            return value == null ? "" : value.ToString().Trim();
+        }
+
+        // The rules of the grid (rows left empty are skipped); null and the error text when one is bad.
+        private List<PortRule> ReadRules(out string error)
+        {
+            error = null;
+            List<PortRule> rules = new List<PortRule>();
+            foreach (DataGridViewRow row in portGrid.Rows)
+            {
+                if (row.IsNewRow)
+                    continue;
+                string pattern = CellText(row, 0);
+                if (pattern.Length == 0)
+                    continue;
+                double[] numbers = new double[4];
+                int[] columns = { 1, 2, 4, 5 };
+                for (int i = 0; i < 4; i++)
+                {
+                    if (!double.TryParse(CellText(row, columns[i]).Replace(',', '.'), NumberStyles.Float,
+                            CultureInfo.InvariantCulture, out numbers[i]))
+                    {
+                        error = "Port offsets must be numbers (block pattern '" + pattern + "').";
+                        return null;
+                    }
+                }
+
+                PortRule rule = new PortRule
+                {
+                    Pattern = pattern,
+                    RefrigX = numbers[0],
+                    RefrigY = numbers[1],
+                    RefrigDir = CellText(row, 3),
+                    DrainX = numbers[2],
+                    DrainY = numbers[3],
+                    DrainDir = CellText(row, 6)
+                };
+                if (!rule.IsValid(out error))
+                    return null;
+                rules.Add(rule);
+            }
+
+            return rules;
         }
 
         private static void AddHeader(TableLayoutPanel table, string text)
@@ -209,6 +349,12 @@ namespace HvacAiCadAddin.Commands
             table.Controls.Add(control);
         }
 
+        private static bool TryNumber(TextBox box, out double value)
+        {
+            return double.TryParse((box.Text ?? "").Trim().Replace(',', '.'), NumberStyles.Float,
+                CultureInfo.InvariantCulture, out value);
+        }
+
         private void OnOkClick(object sender, EventArgs e)
         {
             RouteDraftSettings settings = new RouteDraftSettings
@@ -222,15 +368,36 @@ namespace HvacAiCadAddin.Commands
                 TrunkAxis = AxisValues[Math.Max(0, axisBox.SelectedIndex)]
             };
 
-            double stub;
-            if (!double.TryParse((stubBox.Text ?? "").Trim().Replace(',', '.'), NumberStyles.Float,
-                    CultureInfo.InvariantCulture, out stub))
+            double stub, cell, room, outside, boundary, bend;
+            if (!TryNumber(stubBox, out stub))
             {
                 errorLabel.Text = "The shortest stub must be a number.";
                 return;
             }
 
+            if (!TryNumber(cellBox, out cell) || !TryNumber(roomBox, out room) || !TryNumber(outsideBox, out outside)
+                || !TryNumber(boundaryBox, out boundary) || !TryNumber(bendBox, out bend))
+            {
+                errorLabel.Text = "The corridor costs must be numbers.";
+                return;
+            }
+
+            string ruleError;
+            List<PortRule> rules = ReadRules(out ruleError);
+            if (rules == null)
+            {
+                errorLabel.Text = ruleError;
+                return;
+            }
+
             settings.MinStub = stub;
+            settings.CellSize = cell;
+            settings.RoomPenalty = room;
+            settings.OutsidePenalty = outside;
+            settings.BoundaryPenalty = boundary;
+            settings.BendPenalty = bend;
+            settings.PortMode = PortModeValues[Math.Max(0, portModeBox.SelectedIndex)];
+            settings.PortRules = rules;
             string error;
             if (!settings.IsValid(out error))
             {
