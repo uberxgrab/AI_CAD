@@ -1,0 +1,44 @@
+<Project>
+  <!--
+    Console tests for the AutoCAD-free HVACPLACEODU and HVACRISER cores (cad_addin/src/OduCore.cs, RiserCore.cs): outdoor unit choice,
+    riser sizing, cumulative sums and remembered settings. Sdk.props is
+    imported explicitly so the build folders can be set first: bin/ and obj/ stay in %TEMP%, outside
+    the repository and outside cad_addin/ (whose SDK glob would compile this project into the add-in).
+  -->
+  <PropertyGroup>
+    <OduRiserCoreBuildRoot>$([System.IO.Path]::GetTempPath())OduRiserCoreTests\</OduRiserCoreBuildRoot>
+    <BaseIntermediateOutputPath>$(OduRiserCoreBuildRoot)obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(OduRiserCoreBuildRoot)bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>OduRiserCoreTests</RootNamespace>
+    <AssemblyName>OduRiserCoreTests</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Runtime.Serialization" />
+    <Compile Remove="Acad\**" />
+    <Compile Include="..\..\cad_addin\src\DuctGeometryCore.cs" Link="DuctGeometryCore.cs" />
+    <Compile Include="..\..\cad_addin\src\PipeCatalogCore.cs" Link="PipeCatalogCore.cs" />
+    <Compile Include="..\..\cad_addin\src\PipeSettingsCore.cs" Link="PipeSettingsCore.cs" />
+    <Compile Include="..\..\cad_addin\src\PipeNetworkCore.cs" Link="PipeNetworkCore.cs" />
+    <Compile Include="..\..\cad_addin\src\RefrigCleanerCore.cs" Link="RefrigCleanerCore.cs" />
+    <Compile Include="..\..\cad_addin\src\NetworkTopologyCore.cs" Link="NetworkTopologyCore.cs" />
+    <Compile Include="..\..\cad_addin\src\RefrigSizingCore.cs" Link="RefrigSizingCore.cs" />
+    <Compile Include="..\..\cad_addin\src\OduCore.cs" Link="OduCore.cs" />
+    <Compile Include="..\..\cad_addin\src\RiserCore.cs" Link="RiserCore.cs" />
+    <Compile Include="..\PipeCoreTests\Check.cs" Link="Check.cs" />
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>
