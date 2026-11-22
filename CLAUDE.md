@@ -1,7 +1,8 @@
 # CLAUDE.md
 
-Guidance for Claude Code in this repository. It is based on `AGENTS.md`, with
-details corrected against the code. Where the two differ, trust this file and
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+It is based on `AGENTS.md`, with details corrected against the code. Where the two differ, trust this file and
 verify against the source.
 
 ## Product
@@ -21,11 +22,32 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
   - `parser.py`, `geometry.py`, `rules.py`, `models.py`, `reporting.py`:
     loading, analysis, rule checks, data models, and exports.
   - `config.json`: default thresholds.
-  - `tests/test_pipeline.py`: `unittest` suite.
+  - `tcvn3.py`, `arch_extract.py`, `arch_rooms.py`: "tầng 0" architecture reading
+    (no AI; ezdxf + shapely). `tcvn3.py` decodes legacy TCVN3 Vietnamese text.
+    `arch_extract.py` is the fully automatic prototype (views, titles, rooms by
+    morphological closing, crossed-out sheets, X-marked shafts); it also holds the
+    helpers the others import. `arch_rooms.py` is the `HVACROOMS` back end: one
+    user-chosen region and user-ticked wall layers, rooms by polygonize.
+  - `tests/test_pipeline.py`, `tests/test_arch_extract.py`, `tests/test_arch_rooms.py`:
+    `unittest` suites.
   - `tests/HvacQtoCoreTests/`: C# console tests for `HVACQTO` core logic. Keep this
     outside `cad_addin/`, whose SDK glob would compile it into the add-in.
   - `tests/PipeCoreTests/`: C# console tests for the AutoCAD-free pipe core
     (`HVACPIPESIZE` run finding, `HVACREFRIG` cleaning, pipe tree and sizing, and `HVACDRAIN` tree, joints and sizing). Same rule: outside `cad_addin/`.
+  - `tests/DuctCoreTests/`: C# console tests for `DuctGeometryCore.cs` (fitting
+    rules, routing, hit tests, align, sizes, settings). Same rule.
+  - `tests/DuctAcadTests/`: headless `accoreconsole` tests for `HVACDUCT` and
+    `HVACDUCTALIGN` on copies of the template, run by `run-tests.ps1`. It links the
+    duct sources from `cad_addin/src/` and references only `acdbmgd`/`accoremgd`.
+    `tests/PipeAcadTests` is planned but not written.
+  - `tests/RoomsCoreTests/`, `tests/LoadCoreTests/`, `tests/UnitCoreTests/`,
+    `tests/RouteCoreTests/`: C# console tests for the AutoCAD-free cores of
+    `HVACROOMS`, `HVACLOAD`, `HVACPLACEUNITS` and `HVACROUTEDRAFT`. They link
+    `tests/PipeCoreTests/Check.cs`. Same rule. `tests/UnitCoreTests/Acad/` is a
+    headless accoreconsole test of the unit writer (no run script yet).
+  - `heat_load.py` + `heat_load_table.json`: the `HVACLOAD` back end. The W/m² values
+    in the table are PLACEHOLDERS until the user sends their own table; all values,
+    keywords and labels are read from the file.
 - `CAD/`: representative CAD inputs. Explicitly named root fixtures such as
   `test.dxf` are also allowed.
   - `CAD/MEP_DWT_3.dwg`: the user's template drawing. It holds their duct blocks,
@@ -92,12 +114,19 @@ parser.load_dxf -> extract_entities      RawEntity
 | `HVACSTRETCH` | `cad_addin/src/HvacStretch.cs` | Mixed native/dynamic stretch from one AutoCAD object selection (crossing/window, polygon, picks, Shift-removal). Main current feature. |
 | `HVACQTO` | `cad_addin/src/HvacQuantityTakeoff.cs`, `HvacQuantityTakeoffCore.cs`, `TakeoffSettingsForm.cs` | Exports the pickfirst set, or a new `GetSelection`, to a SpreadsheetML `.xml` workbook laid out like the VRV quotation template, with formulas and a contingency factor cell. |
 | `HVACCOUNT` | `cad_addin/src/TQO.cs` | Totals `Line` and `Polyline` lengths on layers that start with `!` and contain `x` (case-insensitive). |
-| `FIRSTMESSAGE` | `cad_addin/src/Message.cs` | Writes a hello message to the command line. |
+| `HVACDUCT` | `cad_addin/src/HvacDuctDraw.cs`, `DuctRouteSession.cs`, `DuctDrawForm.cs`, `DuctBlockLibrary.cs`, `DuctGeometryCore.cs` | Draws duct runs as `REC_WxH`/`Round D` dynamic blocks on a template system layer (`Next point or [Size/Undo] <length>:` loop with `PointMonitor` preview). Continues from a duct end, branches with a tap from a side wall, and generates elbows, transitions and taps as polylines tagged `HVACAI_FITTING`, shortening `Distance3` by the takeups. Missing sizes are imported or cloned from the template. Fitting formulas (SMACNA-based) are in `AGENTS.md`. Partly tested in AutoCAD. |
+| `HVACDUCTALIGN` | `cad_addin/src/HvacDuctAlign.cs`, `DuctAligner.cs` | Revit-style Align: pick a reference edge (nested in a duct or a plain curve), then a parallel duct edge, which is moved to be collinear (`Multiple` keeps the reference). Coaxial facing ducts are joined without asking (merged, resized, or with an eccentric transition); an end face at right angles to a side wall gets a tap. |
 | `HVACPIPESIZE` | `cad_addin/src/HvacPipeSize.cs`, `PipeDrawingLibrary.cs`, `PipeSizeForm.cs` | Pick a LINE/LWPOLYLINE; finds the pipe run (corners pass, T nodes and layer changes stop it), highlights it, and moves it to the chosen type and size layer by cutting curves with `GetSplitCurves`. Needs in-AutoCAD acceptance testing. |
 | `HVACREFRIG` | `cad_addin/src/HvacRefrig.cs`, `RefrigWriter.cs`, `RefrigSettingsForm.cs`, `NetworkTopologyCore.cs`, `RefrigSizingCore.cs`, `RefrigCapacityReader.cs`, `RefrigSizeWriter.cs`, `RefrigSizingUi.cs`, `SizingForm.cs` | Cleans a rough refrigerant LINE/LWPOLYLINE network (weld, orthogonalise, collapse jogs, merge collinear nodes; pipe ends never move), previews it, and inserts `Branch Connection (1)` refnets. With "Size pipes" on (default) it then sizes the pipes by the Daikin VRV IV tables: it reads each indoor unit's capacity (xdata of an earlier run, a block name with `x kW`, or an `HVAC-NAME OF EQUIPMENTS` label), shows `SizingForm`, and on Apply puts each segment on its `EIA_1 RP` layer, stores the capacity xdata and writes `%%C<gas>/<liquid>` labels (text height is a setting, default 150 mm). Cancel in the dialog writes nothing. Needs in-AutoCAD acceptance testing. |
 | `HVACDRAIN` | `cad_addin/src/HvacDrain.cs`, `DrainWriter.cs`, `DrainSizingUi.cs`, `DrainSettingsForm.cs`, `DrainSettingsCore.cs`, `DrainNetworkCore.cs`, `DrainGeometryCore.cs`, `DrainSizingCore.cs`, `DrainPlanCore.cs` | Straightens a rough condensate LINE/LWPOLYLINE network with the HVACREFRIG cleaner (no refnets), builds the tree toward the picked drain point, cuts 90 degree bends and right-angle T joints with 45 degree pieces (300 mm slant, the branch lands downstream of the T), sizes each pipe from the indoor-unit kW (Daikin Si39: D27 for one unit, D34 to D110 by total kW and slope, never smaller toward the drain) in the shared `SizingForm`, and writes the pipes on their `EIA_1 Pipe condensated DN<n>` layers with `D<size>-<slope>%` labels. Needs in-AutoCAD acceptance testing. |
 | `HVACPOWERWIRE` | `cad_addin/src/HvacPowerWire.cs`, `PowerWireCore.cs`, `PowerWireWriter.cs`, `PowerWireSettingsForm.cs` | Redraws a rough trunk-and-branch tree of LINEs/LWPOLYLINEs as the indoor-unit series power wire: cleans it with the HVACREFRIG cleaner (no refnets), builds the tree from the picked supply end, replaces each branch junction by a hook (drop to the unit, 45 degree slant of 300 mm, rise back to the trunk) in series order, ends the last unit with only its drop leg, keeps a plain drop (circled, warned) where a hook does not fit, and writes one polyline per wire on `EIA_5 SUPPLY WIRE` (or `EIA_5 SIGNAL WIRE`) with optional `2x1.5 MM2` cable text beside each rise leg. Needs in-AutoCAD acceptance testing. |
 | `HVACCTRLWIRE` | `cad_addin/src/HvacCtrlWire.cs`, `ControlWireCore.cs`, `ControlWireWriter.cs`, `ControlWireSettingsForm.cs` | Draws control wires from a thermostat to many indoor units from one template LINE/LWPOLYLINE route: each other selected unit gets its own polyline on `EIA_5 CONTROL WIRE`, parallel to the template at k x 150 mm (the wire that leaves first is outermost, so none cross), starting at its own offset position at the thermostat end, then leaving perpendicular at the route point nearest the unit's terminal point (the template unit's terminal carried onto units of the same block, else the insertion point). Optional `2x0.75 MM2` cable text beside each exit leg. Straight segments only (arcs refused). Needs in-AutoCAD acceptance testing. |
+
+| `HVACROOMS` | `cad_addin/src/HvacRooms.cs`, `RoomsCore.cs`, `RoomsExchange.cs`, `RoomsWriter.cs`, `RoomsSettingsForm.cs`; back end `arch_rooms.py` | Semi-automatic room finding. The user window/crossing-selects one floor plan and ticks the wall layers (walls, columns, glass, doors, facade; suggested by name, remembered). The selection is `WblockCloneObjects`-copied to a DXF snapshot in `%TEMP%\HvacAiCadAddin\rooms\<time>\` with `request.json`, and `arch_rooms.py` runs as a separate `python.exe` process (repo `venv` by default; never inside AutoCAD). Python nodes and polygonizes the wall curves after replacing door swing arcs by chords, bridging facing wall-end caps up to 1800 mm and snapping 50 mm gaps; faces narrower than 400 mm (wall cavities) or under 1 m² are dropped; small faces with an X of two diagonals, or a HKT/gen/shaft text, are shafts. Preview as transients, then Yes writes closed LWPOLYLINEs on `HVAC-ROOM` (shafts colour 6) and MText "name / area m²" on `HVAC-ROOM-TEXT`, xdata `HVACAI_ROOM`, one undo group; a rerun erases earlier tagged rooms inside the area first. Lines on `HVAC-ROOM-SPLIT` always count as walls (to split open spaces). Pipeline verified headless in AutoCAD 2024 `accoreconsole`; dialog, preview and picking need in-AutoCAD testing. |
+
+| `HVACLOAD` | `cad_addin/src/HvacLoad.cs`, `LoadCore.cs`, `LoadWriter.cs`, `LoadSettingsForm.cs`; back end `heat_load.py` + `heat_load_table.json` | Area-based cooling load (user decision: area × W/m² by room type × safety factor, no detailed method). Reads `HVAC-ROOM` polylines; Python classifies each room from its name (WC, storage, technical, stair, balcony, shaft are not cooled) and computes kW; a grid dialog lets the user change types and W/m² (optionally saved back to the table); Python recomputes with the overrides. Writes xdata `HVACAI_LOAD` [1000 type][1040 W/m²][1040 kW][1040 safety] on each room, adds/replaces a "x.x kW" line in the room label, and writes `<drawing>_HVACLOAD.csv`. One undo group. Not yet run in AutoCAD. |
+| `HVACPLACEUNITS` | `cad_addin/src/HvacPlaceUnits.cs`, `UnitPlacementCore.cs`, `UnitPlacementWriter.cs`, `UnitPlacementForm.cs` | Chooses Daikin VRV cassettes per room from `HVACAI_LOAD` (smallest index covering the load within a 3% tolerance; above the largest allowed, default 16 kW, splits into equal units, max 6) and places them inside the room (pole of inaccessibility for one, slabs along the long axis for several; 600 mm wall clearance, 300 mm between units; rotation = dominant wall direction). Template blocks `FCU-CAS-<kW> kW` (indices 25-140; no 2.2/8.0 kW in the template; body 950 square, base point mid top edge, body centre at (0,-475)) on `EIA_1 MECHANICAL EQUIPMENT`, imported via `TemplateSource` or drawn as a fallback. Tags `HVACAI_PLACED` [1000 room id][1071 index][1040 kW][1070 n][1070 of]; a rerun replaces units of the same rooms. Writer verified headless; dialog and preview not. |
+| `HVACROUTEDRAFT` | `cad_addin/src/HvacRouteDraft.cs`, `RouteDraftCore.cs`, `RouteDraftWriter.cs`, `RouteDraftForm.cs` | Draws rough orthogonal trees from selected unit blocks (insertion points) to a picked target or the nearest `HVAC-ROOM` shaft (`[Shaft]`), on `HVAC-DRAFT-REFRIG`/`-DRAIN`/`-POWER` with xdata `HVACAI_DRAFT`, for the user to run `HVACREFRIG`/`HVACDRAIN`/`HVACPOWERWIRE` on. Best of a trunk-and-branches heuristic and a rectilinear Prim tree (ranked: target at an end, fewest 4-way crossings, fewest units mid-pipe, shortest). Walls are ignored; default stub 1500 mm so the refrigerant cleaner's refnet spacing is met. Core outputs pass `RefrigCleaner` and `NetworkTopologyBuilder` in tests; not run in AutoCAD. |
 
 `HVACQTO` classification:
 
@@ -130,9 +159,11 @@ parser.load_dxf -> extract_entities      RawEntity
 | Dynamic block stretching | Implemented; needs in-AutoCAD acceptance testing | Supported properties are `Distance3`, `Distance`, `Length`, and `Width`. The property must be numeric, writable, and backed by a Dynamic Block Stretch Action. |
 | Native STRETCH preview | Implemented; needs in-AutoCAD acceptance testing | AutoCAD owns the second-point prompt and its preview. `PointMonitor` previews eligible dynamic blocks at the same time. |
 | Quantity takeoff | Initial implementation | `HVACQTO` and `HVACCOUNT` exist. There is no common MEP object/quantity schema yet. |
-| Heat-load calculation | Planned | No room extraction, design conditions, thermal assumptions, or calculation engine exists. |
+| Heat-load calculation | Area-based (`HVACLOAD`) | Area × W/m² × safety factor per room type; W/m² table is a placeholder pending the user's values. No envelope, orientation or design-condition model. |
+| Rooms → units → rough routes | `HVACROOMS` → `HVACLOAD` → `HVACPLACEUNITS` → `HVACROUTEDRAFT` → existing `HVACREFRIG`/`HVACDRAIN`/`HVACPOWERWIRE` | Each step is a separate command with preview and one undo group. The user tested the chain in AutoCAD on 2026-11-22 and found relatively few bugs; the remaining ones are not listed yet. |
 | DXF validation / AI error detection | Rule-based foundation | Deterministic checks only. AI inference, labelled data, and CAD-facing review workflows are planned. |
-| Automated tests | Python and `HVACQTO` core | `tests/HvacQtoCoreTests/` covers the AutoCAD-free takeoff logic and workbook output. There are no AutoCAD integration tests, so add-in commands must be tested manually in AutoCAD. |
+| Room extraction (tầng 0) | Prototype + `HVACROOMS` | Geometry only. Real-drawing limits: open-plan spaces merge (use `HVAC-ROOM-SPLIT`), openings wider than 1800 mm or single-line walls leak, the room name is the longest text inside. `DT. x M2` labels in the sample drawing are whole-unit areas, so they only roughly score rooms. |
+| Automated tests | Python, C# cores, headless duct | `tests/HvacQtoCoreTests/`, `tests/PipeCoreTests/`, `tests/DuctCoreTests/` and `tests/RoomsCoreTests/` cover the AutoCAD-free logic. `tests/DuctAcadTests/` runs non-interactive duct code in `accoreconsole`. Jigs, previews, osnap and picking have no automated tests, so commands must still be tested manually in AutoCAD. |
 
 ## Next steps
 
@@ -226,14 +257,32 @@ venv\Scripts\python.exe main.py --input test.dxf --report out/report.json --over
 # Report add-in and AutoCAD discovery status
 venv\Scripts\python.exe main.py --cad-status
 
-# Build the add-in
+# Build the add-in (first installed of AutoCAD 2023, 2021, 2024, see cad_addin\AcadDir.props;
+# AcadDir picks another install)
 dotnet build cad_addin\HvacAiCadAddin.csproj --no-restore -p:Configuration=Debug -p:Platform=x64
+dotnet build cad_addin\HvacAiCadAddin.csproj -p:Configuration=Debug -p:Platform=x64 "-p:AcadDir=C:\Program Files\Autodesk\AutoCAD 2024"
+
+# Run the HVACROOMS / HVACLOAD / HVACPLACEUNITS / HVACROUTEDRAFT core tests (output in %TEMP%)
+dotnet run --project tests\RoomsCoreTests\RoomsCoreTests.csproj -c Debug
+dotnet run --project tests\LoadCoreTests\LoadCoreTests.csproj -c Debug
+dotnet run --project tests\UnitCoreTests\UnitCoreTests.csproj -c Debug
+dotnet run --project tests\RouteCoreTests\RouteCoreTests.csproj -c Debug
+
+# Tầng 0: automatic prototype on a whole DXF, or the HVACROOMS back end on a request
+venv\Scripts\python.exe arch_extract.py --input plan.dxf --out-dir out\arch [--config c.json]
+venv\Scripts\python.exe arch_rooms.py --request C:\tmp\rooms\request.json
 
 # Run the HVACQTO core tests (build output goes to %TEMP%\HvacQtoCoreTests)
 dotnet run --project tests\HvacQtoCoreTests\HvacQtoCoreTests.csproj -c Debug
 
 # Run the pipe core tests (HVACPIPESIZE / HVACREFRIG; build output goes to %TEMP%\PipeCoreTests)
 dotnet run --project tests\PipeCoreTests\PipeCoreTests.csproj -c Debug
+
+# Run the duct core tests (HVACDUCT / HVACDUCTALIGN geometry; build output goes to %TEMP%)
+dotnet run --project tests\DuctCoreTests\DuctCoreTests.csproj -c Debug
+
+# Run the headless duct tests in accoreconsole on template copies (exit 0 = all pass)
+powershell -File tests\DuctAcadTests\run-tests.ps1 [-TimeoutSec 600] [-NoBuild]
 ```
 
 `main.py` also accepts `--features` and `--feedback-template` for JSONL exports.
@@ -343,9 +392,9 @@ Each of these was checked in `accoreconsole` on a copy of `CAD/MEP_DWT_3.dwg`.
 - **`requirements.txt` is UTF-16 LE with a BOM.** Plain text tools and some editors
   show it garbled or with null bytes. Keep the encoding when editing it, or
   re-save it as UTF-8 deliberately.
-- **Two Debug output folders.** The build above writes to
+- **Two Debug output folders.** The build above (`-p:Platform=x64`) writes to
   `cad_addin\bin\x64\Debug\net48\`, but `start.scr` loads
-  `cad_addin\bin\Debug\net48\`. Confirm which DLL AutoCAD loads, or a test can
+  `cad_addin\bin\Debug\net48\`, which is where a build without `-p:Platform` goes. Confirm which DLL AutoCAD loads, or a test can
   silently run an older build.
 - **`--cad-status` reports `built_addin: null`.** `python_bridge.py` still looks
   for `HvacAiCadAddin.arx` under `cad_addin/build/`, so it never finds the managed
@@ -362,7 +411,14 @@ Each of these was checked in `accoreconsole` on a copy of `CAD/MEP_DWT_3.dwg`.
   `out/` are still in git. Running the CLI overwrites them, so check `git status`
   and do not stage them by accident.
 - **Machine-specific paths.** `start.scr` and the `.csproj` hard-code
-  `C:\Users\Admin\hvac_ai` and the AutoCAD 2023 install path.
+  `C:\Users\Admin\hvac_ai`; the `.csproj` takes the AutoCAD folder from `AcadDir`
+  (default 2023).
+- **Windows consoles are cp1252.** Python that prints Vietnamese must call
+  `sys.stdout.reconfigure(encoding="utf-8")` (the CLIs do), and `python -I` ignores
+  `PYTHONIOENCODING`.
+- **TCVN3 versus Unicode.** Unicode capitals such as `Ò`, `Á` sit in Latin-1, so a
+  string is decoded as TCVN3 only when it also holds a code outside that set (or its
+  font is `.Vn*`); see `tcvn3.looks_tcvn3`.
 
 ## Coding style
 

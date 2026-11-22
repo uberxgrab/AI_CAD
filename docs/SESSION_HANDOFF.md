@@ -120,11 +120,36 @@ Agent con đang chạy dở **không** tiếp tục được trên máy khác; g
 4. **Đề xuất giảm usage chưa áp dụng (18/11):** đặt `model: sonnet` cho
    `.claude/agents/research.md`; đặt biến `CLAUDE_CODE_SUBAGENT_MODEL=sonnet`. Người
    dùng đã dừng việc này, nhưng các lần giao việc sau đó vẫn dùng agent Sonnet.
-5. **Bước tiếp theo cho phần AI, đang chờ người dùng (20/11):** thử "tầng 0" (tách
-   phòng, tường bao, trục kỹ thuật bằng ezdxf/shapely, không dùng AI) trên 3–5 bản vẽ
-   kiến trúc thật. Claude đã hỏi người dùng có bản vẽ kiến trúc mẫu nào và để ở đâu;
-   `CAD/` hiện chỉ có `MEP_DWT_3.dwg`. Người dùng cũng chưa chọn giữa làm MCP server
-   chỉ đọc hay thử tầng 0 trước. Cả hai đều là thay đổi lớn, cần lập kế hoạch.
+5. **Tầng 0 và lệnh `HVACROOMS` (21/11, chưa commit, chờ thử tay):** người dùng chọn tầng 0
+   trước MCP, rồi chọn hướng **bán tự động** (không dùng TraceBoundary). 5 bản vẽ trong
+   `CAD/` chưa commit.
+   - Python: `tcvn3.py`; `arch_extract.py` (prototype tự động); `arch_rooms.py` (phía sau
+     của HVACROOMS, đọc `request.json`, ghi `rooms.json`, lõi polygonize: dây cung cửa,
+     bịt ô mở giữa hai đầu tường ≤ 1800 mm, nối khe ≤ 50 mm). Hộp kỹ thuật nhận theo
+     **chữ X** (hai nét chéo) hoặc chữ HKT/gen/shaft, theo yêu cầu người dùng; vùng quét
+     cánh cửa không còn bị tính là trục kỹ thuật. Layer `HVAC-ROOM-SPLIT` luôn là tường.
+   - C#: `HvacRooms.cs`, `RoomsCore.cs`, `RoomsExchange.cs`, `RoomsWriter.cs`,
+     `RoomsSettingsForm.cs`; `.csproj` có `AcadDir` (mặc định 2023). Build được với
+     AutoCAD 2024. Test: `tests/RoomsCoreTests` (285 kiểm tra), 20 test Python.
+   - Đã chạy ngầm cả chuỗi (snapshot → Python → ghi → chạy lại thay thế) trong
+     `accoreconsole` 2024 trên bản sao `P-KT` tầng 9: 19 phòng, 2 hộp kỹ thuật.
+   - Việc tiếp: người dùng cài AutoCAD 2023 (nếu không được thì dùng 2021) và thử tay
+     hộp thoại, preview, Yes/No, Undo. Giới hạn đã biết: không gian mở bị gộp (vẽ nét
+     `HVAC-ROOM-SPLIT`), tên phòng là chữ dài nhất trong phòng, nhãn `DT.` của bản vẽ mẫu
+     là diện tích cả căn.
+   - Máy mới: venv ở `venv\` (Python 3.12 cài bằng winget); matplotlib chỉ cài trong venv
+     để vẽ kiểm tra, không có trong `requirements.txt`. AutoCAD trên máy này là 2021/2024.
+6. **Ba tầng sau tầng 0 (21/11, làm song song bằng 3 agent Sonnet theo yêu cầu người dùng,
+   chưa commit, chưa thử tay):** người dùng chọn tính tải = diện tích × W/m² × hệ số dự
+   phòng; **bảng W/m² phải do người dùng gửi** (hiện là giá trị giữ chỗ trong
+   `heat_load_table.json`). Lệnh `HVACLOAD` (ghi `HVACAI_LOAD`, nhãn kW, CSV),
+   `HVACPLACEUNITS` (chọn cassette `FCU-CAS-<kW> kW` theo index Daikin, đặt trong phòng,
+   layer `EIA_1 MECHANICAL EQUIPMENT`), `HVACROUTEDRAFT` (cây nét vuông góc về trục kỹ
+   thuật trên `HVAC-DRAFT-*` để chạy tiếp HVACREFRIG/HVACDRAIN/HVACPOWERWIRE). Build
+   chung 0 cảnh báo; mọi bộ test Python và C# qua. Ngày 22/11 người dùng đã thử tay cả
+   chuỗi trong AutoCAD: tương đối ít lỗi, các lỗi còn lại chưa được liệt kê, người dùng
+   muốn giải quyết khi có AI hỗ trợ (xem memory ai-mcp-integration, các phase 0–4 MCP).
+   Vẫn chờ bảng W/m² của người dùng.
 6. **Kế hoạch cũ chưa làm:** lệnh bóc van và bóc thiết bị qua attribute (tư liệu ở
    `AGENTS.md`); schema MEP chung; tính tải lạnh; dữ liệu lỗi có gán nhãn cho AI.
 
