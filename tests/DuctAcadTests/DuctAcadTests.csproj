@@ -25,6 +25,8 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
+  <Import Project="..\..\cad_addin\AcadDir.props" />
+
   <ItemGroup>
     <Compile Include="*.cs" />
     <Compile Include="..\..\cad_addin\src\DuctGeometryCore.cs" Link="DuctGeometryCore.cs" />
@@ -34,11 +36,11 @@
     <Compile Include="..\..\cad_addin\src\DynamicBlockHelpers.cs" Link="DynamicBlockHelpers.cs" />
     <Compile Include="..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
     <Reference Include="AcDbMgd">
-      <HintPath>C:\Program Files\Autodesk\AutoCAD 2023\acdbmgd.dll</HintPath>
+      <HintPath>$(AcadDir)\acdbmgd.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AcCoreMgd">
-      <HintPath>C:\Program Files\Autodesk\AutoCAD 2023\accoremgd.dll</HintPath>
+      <HintPath>$(AcadDir)\accoremgd.dll</HintPath>
       <Private>False</Private>
     </Reference>
   </ItemGroup>

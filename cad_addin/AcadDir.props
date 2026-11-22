@@ -1,0 +1,21 @@
+<Project>
+  <!--
+    Picks the AutoCAD install whose managed DLLs (AcDbMgd, AcCoreMgd, AcMgd) are referenced.
+    Without -p:AcadDir=... the first installed of 2023, 2021, 2024 is used. AutoCAD 2021-2024
+    share API R24, so a DLL built against the older install also loads in the newer one.
+    Override for another version, e.g.
+      dotnet build ... "-p:AcadDir=C:\Program Files\Autodesk\AutoCAD 2024"
+    Imported by cad_addin\HvacAiCadAddin.csproj and the accoreconsole test projects.
+  -->
+  <PropertyGroup>
+    <AcadDir Condition="'$(AcadDir)' == '' And Exists('$(ProgramW6432)\Autodesk\AutoCAD 2023\AcDbMgd.dll')">$(ProgramW6432)\Autodesk\AutoCAD 2023</AcadDir>
+    <AcadDir Condition="'$(AcadDir)' == '' And Exists('$(ProgramW6432)\Autodesk\AutoCAD 2021\AcDbMgd.dll')">$(ProgramW6432)\Autodesk\AutoCAD 2021</AcadDir>
+    <AcadDir Condition="'$(AcadDir)' == '' And Exists('$(ProgramW6432)\Autodesk\AutoCAD 2024\AcDbMgd.dll')">$(ProgramW6432)\Autodesk\AutoCAD 2024</AcadDir>
+    <AcadDir Condition="'$(AcadDir)' == ''">C:\Program Files\Autodesk\AutoCAD 2023</AcadDir>
+  </PropertyGroup>
+
+  <Target Name="CheckAcadDir" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(AcadDir)\AcDbMgd.dll')"
+           Text="AutoCAD managed DLLs not found in '$(AcadDir)'. Install AutoCAD 2021-2024 or pass -p:AcadDir=&quot;C:\Program Files\Autodesk\AutoCAD 20xx&quot;." />
+  </Target>
+</Project>

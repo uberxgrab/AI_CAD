@@ -11,27 +11,31 @@
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
 
+  <!-- Sets $(AcadDir): the installed AutoCAD whose managed DLLs are referenced. -->
+  <Import Project="AcadDir.props" />
+
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <StartAction>Program</StartAction>
-    <StartProgram>C:\Program Files\Autodesk\AutoCAD 2023\acad.exe</StartProgram>
+    <StartProgram>$(AcadDir)\acad.exe</StartProgram>
     <StartArguments>/nologo /b "C:\Users\Admin\hvac_ai\cad_addin\start.scr"</StartArguments>
-    <StartWorkingDirectory>C:\Program Files\Autodesk\AutoCAD 2023</StartWorkingDirectory>
+    <StartWorkingDirectory>$(AcadDir)</StartWorkingDirectory>
   </PropertyGroup>
 
   <ItemGroup>
     <Reference Include="AcCoreMgd">
-      <HintPath>C:\Program Files\Autodesk\AutoCAD 2023\AcCoreMgd.dll</HintPath>
+      <HintPath>$(AcadDir)\AcCoreMgd.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AcDbMgd">
-      <HintPath>C:\Program Files\Autodesk\AutoCAD 2023\AcDbMgd.dll</HintPath>
+      <HintPath>$(AcadDir)\AcDbMgd.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="AcMgd">
-      <HintPath>C:\Program Files\Autodesk\AutoCAD 2023\AcMgd.dll</HintPath>
+      <HintPath>$(AcadDir)\AcMgd.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
 
