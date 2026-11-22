@@ -1,0 +1,35 @@
+<Project>
+  <!--
+    Console tests for the AutoCAD-free HVACLOAD core (cad_addin/src/LoadCore.cs): remembered
+    settings, the JSON contract with arch_rooms.py, wall-layer suggestions and labels. Sdk.props is
+    imported explicitly so the build folders can be set first: bin/ and obj/ stay in %TEMP%, outside
+    the repository and outside cad_addin/ (whose SDK glob would compile this project into the add-in).
+  -->
+  <PropertyGroup>
+    <RoomsCoreBuildRoot>$([System.IO.Path]::GetTempPath())LoadCoreTests\</RoomsCoreBuildRoot>
+    <BaseIntermediateOutputPath>$(RoomsCoreBuildRoot)obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(RoomsCoreBuildRoot)bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>LoadCoreTests</RootNamespace>
+    <AssemblyName>LoadCoreTests</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Runtime.Serialization" />
+    <Compile Include="..\..\cad_addin\src\LoadCore.cs" Link="LoadCore.cs" />
+    <Compile Include="..\PipeCoreTests\Check.cs" Link="Check.cs" />
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

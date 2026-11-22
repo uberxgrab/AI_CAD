@@ -1,0 +1,46 @@
+<Project>
+  <!--
+    Headless accoreconsole test for the HVACPLACEUNITS writer (block import from the template, fallback
+    blocks, insertion, xdata, replacement on a rerun). The DLL links the sources it tests and references
+    only AcDbMgd and AcCoreMgd (never AcMgd). Build folders stay in %TEMP%. Run it with run-tests.ps1.
+  -->
+  <PropertyGroup>
+    <UnitAcadBuildRoot>$([System.IO.Path]::GetTempPath())UnitAcadTests\</UnitAcadBuildRoot>
+    <BaseIntermediateOutputPath>$(UnitAcadBuildRoot)obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(UnitAcadBuildRoot)bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>UnitAcadTests</RootNamespace>
+    <AssemblyName>UnitAcadTests</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <Import Project="..\..\..\cad_addin\AcadDir.props" />
+
+  <ItemGroup>
+    <Compile Include="UnitAcadTests.cs" />
+    <Compile Include="..\..\..\cad_addin\src\UnitPlacementCore.cs" Link="UnitPlacementCore.cs" />
+    <Compile Include="..\..\..\cad_addin\src\UnitPlacementWriter.cs" Link="UnitPlacementWriter.cs" />
+    <Compile Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <Reference Include="AcDbMgd">
+      <HintPath>$(AcadDir)\acdbmgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AcCoreMgd">
+      <HintPath>$(AcadDir)\accoremgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

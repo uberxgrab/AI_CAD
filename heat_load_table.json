@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "note": "PLACEHOLDER values pending the user's own table. Typical Vietnamese practice figures; replace with project values. Order = keyword priority (first match wins).",
+  "safety_factor": 1.1,
+  "types": {
+    "wc": {"w_per_m2": 0, "cooled": false, "label_vi": "WC / vệ sinh", "keywords": ["wc", "toilet", "ve sinh", "bathroom"]},
+    "storage": {"w_per_m2": 0, "cooled": false, "label_vi": "Kho", "keywords": ["kho", "storage", "store room"]},
+    "technical": {"w_per_m2": 0, "cooled": false, "label_vi": "Kỹ thuật", "keywords": ["ky thuat", "technical", "may bom"]},
+    "stair": {"w_per_m2": 0, "cooled": false, "label_vi": "Cầu thang", "keywords": ["thang", "cau thang", "stair", "stairs", "staircase", "elevator", "lift"]},
+    "balcony": {"w_per_m2": 0, "cooled": false, "label_vi": "Ban công / lô gia", "keywords": ["ban cong", "lo gia", "balcony", "loggia", "terrace"]},
+    "shaft": {"w_per_m2": 0, "cooled": false, "label_vi": "Hộp kỹ thuật", "keywords": ["shaft", "hkt"]},
+    "hotel": {"w_per_m2": 170, "cooled": true, "label_vi": "Phòng khách sạn / căn hộ dịch vụ", "keywords": ["sup", "dlx", "deluxe", "suite", "studio", "phong khach san", "hotel room", "guest room"]},
+    "bedroom": {"w_per_m2": 150, "cooled": true, "label_vi": "Phòng ngủ", "keywords": ["phong ngu", "ngu", "master", "bedroom", "bed"]},
+    "living": {"w_per_m2": 180, "cooled": true, "label_vi": "Phòng khách / sinh hoạt", "keywords": ["phong khach", "khach", "sinh hoat", "living"]},
+    "office": {"w_per_m2": 180, "cooled": true, "label_vi": "Văn phòng", "keywords": ["van phong", "lam viec", "office"]},
+    "meeting": {"w_per_m2": 250, "cooled": true, "label_vi": "Phòng họp / hội trường", "keywords": ["hop", "hoi truong", "meeting", "conference"]},
+    "lobby": {"w_per_m2": 150, "cooled": true, "label_vi": "Sảnh / hành lang", "keywords": ["sanh", "hanh lang", "lobby", "corridor", "reception"]},
+    "dining": {"w_per_m2": 250, "cooled": true, "label_vi": "Nhà hàng / phòng ăn", "keywords": ["bep an", "phong an", "nha hang", "an uong", "restaurant", "dining", "canteen", "cafe"]},
+    "kitchen": {"w_per_m2": 250, "cooled": true, "label_vi": "Bếp", "keywords": ["bep", "kitchen", "pantry"]},
+    "retail": {"w_per_m2": 200, "cooled": true, "label_vi": "Cửa hàng / thương mại", "keywords": ["cua hang", "shop", "retail", "showroom", "sieu thi"]},
+    "gym": {"w_per_m2": 220, "cooled": true, "label_vi": "Gym / spa", "keywords": ["gym", "spa", "phong tap", "fitness", "yoga"]},
+    "other": {"w_per_m2": 180, "cooled": true, "label_vi": "Khác", "keywords": []}
+  }
+}

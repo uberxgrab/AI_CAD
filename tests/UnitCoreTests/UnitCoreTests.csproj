@@ -1,0 +1,35 @@
+<Project>
+  <!--
+    Console tests for the AutoCAD-free HVACPLACEUNITS core (cad_addin/src/UnitPlacementCore.cs):
+    unit selection, placement in room polygons, remembered settings and the room/load xdata readers. Sdk.props is
+    imported explicitly so the build folders can be set first: bin/ and obj/ stay in %TEMP%, outside
+    the repository and outside cad_addin/ (whose SDK glob would compile this project into the add-in).
+  -->
+  <PropertyGroup>
+    <UnitCoreBuildRoot>$([System.IO.Path]::GetTempPath())UnitCoreTests\</UnitCoreBuildRoot>
+    <BaseIntermediateOutputPath>$(UnitCoreBuildRoot)obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(UnitCoreBuildRoot)bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>UnitCoreTests</RootNamespace>
+    <AssemblyName>UnitCoreTests</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Acad\**" />
+    <Compile Include="..\..\cad_addin\src\UnitPlacementCore.cs" Link="UnitPlacementCore.cs" />
+    <Compile Include="..\PipeCoreTests\Check.cs" Link="Check.cs" />
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>
