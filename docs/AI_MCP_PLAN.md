@@ -24,6 +24,18 @@ mcp_server.py (Python, venv) ── file tools ──► arch_rooms.py, heat_loa
 Add-in (AutoCAD) ── chạy Core/Writer có sẵn khi CMDACTIVE = 0 ── preview + Yes/No
 ```
 
+## Trạng thái (23/11/2026)
+
+- Người dùng chọn host **VS Code + GitHub Copilot Free**, bắt đầu Phase 1 rồi Phase 2, và
+  dùng 5 bản vẽ trong `CAD/` làm bộ đánh giá.
+- **Phase 1 đã xong**: `mcp_server.py` + `aitools/`, 46 test Python qua, chạy được trên cả 5
+  bản vẽ (chuyển DWG 2–13 s; tổng quan 8–118 s, có lưu đệm; thống kê layer 15–23 KB JSON).
+  Chưa chạy thử trong Copilot.
+- **Đang chờ người dùng quyết định**: có làm khung chat ngay trong AutoCAD (lệnh `HVACAI`,
+  khung dock, gọi Claude API trả theo lượng dùng qua một tiến trình Python ngoài AutoCAD,
+  đề xuất có nút Xem/Áp dụng/Bỏ) trong Phase 2 không, và có tạo tài khoản Claude API với
+  giới hạn chi phí không. Copilot Free không có API cho ứng dụng tự viết.
+
 ## Phase 1 — MCP server chỉ đọc file (không sửa add-in)
 
 **Mục tiêu:** hỏi được AI về một bản vẽ: "bản vẽ này có những mặt bằng nào, layer nào là tường,

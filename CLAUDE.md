@@ -47,6 +47,17 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
     `tests/PipeCoreTests/Check.cs`. Same rule. `tests/UnitCoreTests/Acad/` (no run
     script yet) and `tests/OduRiserCoreTests/Acad/run-tests.ps1 -WorkDwg <copy>` are
     headless accoreconsole tests of the writers.
+  - `mcp_server.py` + `aitools/`: AI plan Phase 1, an MCP server (mcp 2.x:
+    `MCPServer` from `mcp.server.mcpserver`, not v1 `FastMCP`; stdio, never print to
+    stdout) with tools `list_drawings`, `convert_dwg` (accoreconsole on a copy,
+    AUDIT + DXFOUT, cached in `%LOCALAPPDATA%\HvacAiCad\work`), `drawing_overview`,
+    `layer_profile`, `render_region`, `find_rooms`, `cooling_load`,
+    `get_privacy_mode`. Privacy modes `normal` / `redact` / `numbers_only`; the
+    mode in `aitools_config.json` (git-ignored; see `aitools_config.example.json`)
+    is a minimum that a call may only tighten. Failures must be raised as
+    `ToolError` or the model only sees a generic error. Host: VS Code + GitHub
+    Copilot agent mode via `.vscode/mcp.json`. Tests: `tests/test_aitools.py`
+    (includes a real stdio client round trip).
   - `heat_load.py` + `heat_load_table.json`: the `HVACLOAD` back end. The W/m² values
     in the table are PLACEHOLDERS until the user sends their own table; all values,
     keywords and labels are read from the file.
