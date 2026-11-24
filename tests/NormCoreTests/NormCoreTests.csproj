@@ -1,0 +1,38 @@
+<Project>
+  <!--
+    Console tests for the AutoCAD-free HVACNORM core (cad_addin/src/NormCore.cs, SizeTagCore.cs): settings,
+    the JSON contract with mep_normalize.py (norm_fixture.json is a real result of the Python fixture in
+    tests/test_mep_normalize.py), the project map files and the planner. Build folders stay in %TEMP%,
+    outside cad_addin/ (whose SDK glob would compile this project into the add-in).
+  -->
+  <PropertyGroup>
+    <NormCoreBuildRoot>$([System.IO.Path]::GetTempPath())NormCoreTests\</NormCoreBuildRoot>
+    <BaseIntermediateOutputPath>$(NormCoreBuildRoot)obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(NormCoreBuildRoot)bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>NormCoreTests</RootNamespace>
+    <AssemblyName>NormCoreTests</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Runtime.Serialization" />
+    <Compile Remove="Acad\**" />
+    <Compile Include="..\..\cad_addin\src\NormCore.cs" Link="NormCore.cs" />
+    <Compile Include="..\..\cad_addin\src\SizeTagCore.cs" Link="SizeTagCore.cs" />
+    <Compile Include="..\PipeCoreTests\Check.cs" Link="Check.cs" />
+    <None Include="norm_fixture.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

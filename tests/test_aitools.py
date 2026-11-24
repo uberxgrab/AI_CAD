@@ -217,6 +217,43 @@ class DrawingTests(Base):
         self.assertEqual(before, sorted(p.name for p in self.tmp.iterdir() if p.name != "work"))
 
 
+class MepMapTests(Base):
+    def setUp(self):
+        super().setUp()
+        from tests.test_mep_normalize import build_mep
+        self.mep = self.tmp / "mep.dxf"
+        build_mep(self.mep)
+
+    def test_proposal_then_saved_map_then_reuse(self):
+        from aitools import mep
+        first = mep.mep_map(self.mep)
+        self.assertFalse(first["map_confirmed"])
+        self.assertEqual(first["map"], {"M-P-WS": "WS", "M-HVAC-DUCT-SA": "SA"})
+        self.assertIn("WS", first["system_codes"])
+        self.assertTrue(any(r["layer"] == "M-P-WS" and r["sample_labels"] for r in first["proposal"]))
+        self.assertTrue(Path(first["result_json"]).is_file())
+        saved = mep.mep_map(self.mep, {"M-P-WS": "ws", "M-HVAC-DUCT-SA": {"system": "SA"}}, "Project A")
+        self.assertTrue(saved["map_confirmed"])
+        self.assertTrue(Path(saved["map_path"]).is_file())
+        self.assertEqual(Path(saved["map_path"]).parent, config.work_dir().parent / "mep_maps")
+        again = mep.mep_map(self.mep, map_name="Project A")
+        self.assertEqual(again["map"], {"M-P-WS": "WS", "M-HVAC-DUCT-SA": "SA"})
+        self.assertEqual(again["stats"], saved["stats"])
+        self.assertEqual(mep.list_maps(), ["Project A"])
+        with self.assertRaises(FileNotFoundError):
+            mep.mep_map(self.mep, map_name="Nope")
+        with self.assertRaises(ValueError):
+            mep.mep_map(self.mep, {"M-P-WS": "WS"}, "../escape")
+
+    def test_numbers_only_hides_label_texts(self):
+        from aitools import mep
+        out = mep.mep_map(self.mep, mode="numbers_only")
+        self.assertTrue(all("text" not in i for i in out["issues"]))
+        self.assertTrue(all(r["sample_labels"] == [] for r in out["proposal"]))
+        redact = mep.mep_map(self.mep, mode="redact")
+        self.assertTrue(any(i.get("text") == "WS-PPR-DN90" for i in redact["issues"]))
+
+
 class McpEndToEndTests(Base):
     def test_stdio_server_lists_tools_and_profiles(self):
         from mcp import Client
@@ -237,7 +274,7 @@ class McpEndToEndTests(Base):
 
         tools, prof, bad, img = asyncio.run(go())
         self.assertEqual(tools, {"list_drawings", "convert_dwg", "drawing_overview", "layer_profile",
-                                 "render_region", "find_rooms", "cooling_load", "get_privacy_mode"})
+                                 "render_region", "find_rooms", "cooling_load", "mep_map", "get_privacy_mode"})
         self.assertFalse(prof.is_error)
         data = json.loads(prof.content[0].text)
         self.assertEqual(data["layers"][0]["layer"], "A-Tuong")

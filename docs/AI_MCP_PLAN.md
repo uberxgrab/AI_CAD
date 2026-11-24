@@ -36,6 +36,42 @@ Add-in (AutoCAD) ── chạy Core/Writer có sẵn khi CMDACTIVE = 0 ── pr
   đề xuất có nút Xem/Áp dụng/Bỏ) trong Phase 2 không, và có tạo tài khoản Claude API với
   giới hạn chi phí không. Copilot Free không có API cho ứng dụng tự viết.
 
+### Chuẩn hoá ống và lập lại BOQ (yêu cầu 23/11/2026)
+
+Kế hoạch đã được người dùng duyệt:
+- Chỉ thêm 1 tool MCP là `mep_map`.
+- Thêm 2 lệnh AutoCAD:
+  - `HVACNORM`: chuẩn hoá ống và ống gió nét đơn, có preview và Yes/No;
+  - `HVACDUCTLINE`: vẽ ống gió từ nét đơn.
+- `HVACQTO` được mở rộng để đọc xdata, đếm SPLINE/ARC, đặt tiền tố cho vật liệu khác BOQ, và thêm loại ống cấp thoát nước khi nhập chiều cao ống đứng.
+
+Quyết định của người dùng:
+- Không tạo layer mới.
+- Ống có vật liệu trùng BOQ được chuyển sang layer `EIA_1` có sẵn.
+- Ống có vật liệu khác giữ layer cũ. Trong BOQ, dòng của nó có dạng `<mã hệ> - <mô tả>`.
+- Ghi đè màu hoặc kiểu nét bị coi là lỗi.
+- Chiều cao ống đứng do người dùng nhập.
+
+Trạng thái:
+- **Bước 1 xong**: `mep_normalize.py`, `aitools/mep.py`, tool `mep_map`, và các test.
+- Kết quả trên bộ bản vẽ thầu M-1, M-4 (tỉ lệ chiều dài có kích thước, gồm cả mức đoán):
+
+  | Bản vẽ | Tỉ lệ có kích thước |
+  |---|---|
+  | Cấp nước M-1-03~06 | 99% |
+  | Thoát nước M-1-07~10 | 85% |
+  | Ống gió M-4-12~14 | 85% |
+  | Ống gió M-4-10~11 | 69% |
+
+  Phần còn thiếu của M-4-10~11 là các nhánh "điển hình" không có nhãn.
+- **Bước 2 xong** (23/11), chưa thử tay trong AutoCAD:
+  - lệnh `HVACNORM`;
+  - `HVACQTO` đọc được tag kích thước, đếm SPLINE và ARC, đặt tiền tố hệ cho ống khác vật liệu, và có thêm loại ống đứng cấp thoát nước;
+  - test không giao diện trong accoreconsole qua trên cả 2021 và 2024. Trên bản sao M-1-07~10 và M-4-12~14, không có nét nào bị lỗi khi cắt hoặc bị mất.
+- **Bước 3 xong** (23/11): lệnh `HVACDUCTLINE` vẽ ống gió từ nét đơn. Chưa thử tay trong AutoCAD.
+  - Trên bản sao M-4-12~14: 48 mạng, 89/89 tuyến vẽ được.
+  - Trên bản sao M-4-10~11: 258/296 tuyến vẽ được. Các tuyến còn lại có nhánh quá ngắn cho tap và cút, hoặc có chỗ vòng gấp; chúng giữ nét đơn và được báo đỏ.
+
 ## Phase 1 — MCP server chỉ đọc file (không sửa add-in)
 
 **Mục tiêu:** hỏi được AI về một bản vẽ: "bản vẽ này có những mặt bằng nào, layer nào là tường,

@@ -1,6 +1,6 @@
 # Bàn giao các session Claude Code: hvac_ai (AI_CAD)
 
-Cập nhật lúc 23/11/2026. File này tóm tắt các session Claude Code của dự án, để có thể
+Cập nhật lúc 24/11/2026. File này tóm tắt các session Claude Code của dự án, để có thể
 clone repo về máy khác và làm tiếp. Quy tắc và kiến trúc dự án nằm trong `CLAUDE.md`
 và `AGENTS.md`; kế hoạch phần AI nằm trong `docs/AI_MCP_PLAN.md`. File này chỉ ghi phần
 không có ở đó: lịch sử, quyết định của người dùng, việc đang dở, và những thứ nằm ngoài
@@ -9,13 +9,11 @@ git.
 ## 1. Làm tiếp trên máy khác
 
 ### Trước khi rời máy hiện tại
-- Toàn bộ việc từ 21/11 nằm trên nhánh **`hvac-room-chain`** (11 commit, từ `ec65a00`
-  tới `358dd0d`), **chưa push, chưa gộp vào `main`**. `main` cũng có 2 commit HVACSTRETCH
-  cũ (`78b4c10`, `6441405`) chưa push. Push cả hai nhánh trước khi đổi máy:
-  ```powershell
-  git push origin main
-  git push -u origin hvac-room-chain
-  ```
+- Người dùng đã đưa việc đến hết 23/11 sáng lên **`main`**, commit `5d1a2a8`. Nhánh
+  `hvac-room-chain` không còn trên máy.
+- **Việc của chiều 23/11 và 24/11 chưa được commit.** Đó là `mep_map`, `HVACNORM`,
+  `HVACDUCTLINE` và phần mở rộng `HVACQTO`; danh sách file ở mục 4.2. Người dùng tự commit
+  và push trước khi đổi máy.
 - 5 bản vẽ đánh giá trong `CAD/` **không có trong git** (chưa commit theo ý người dùng).
   Phải chép tay sang máy mới (xem bảng "Những thứ không có trong git").
 - Hai tag khôi phục HVACSTRETCH (`hvacstretch-before-s1`, `hvacstretch-before-selection`)
@@ -27,7 +25,6 @@ git.
    `StartArguments` trong `.csproj` vẫn gắn cứng đường dẫn cũ `C:\Users\Admin\hvac_ai`.
    ```powershell
    git clone https://github.com/uberxgrab/AI_CAD.git C:\Users\Admin\AI_CAD
-   git -C C:\Users\Admin\AI_CAD switch hvac-room-chain
    ```
 2. Cài AutoCAD 2021–2024 (add-in build cho .NET Framework 4.8; **AutoCAD 2025 trở lên
    dùng .NET 8 nên không nạp được add-in này**), .NET SDK có targeting pack .NET
@@ -64,8 +61,10 @@ git.
 | Memory của Claude | `C:\Users\PC\.claude\projects\c--Users-Admin-AI-CAD\memory\` (máy cũ: `...\c--Users-Admin-hvac-ai\memory\`) | Tạo lại từ mục 6, hoặc chép nguyên thư mục |
 | Lịch sử session (`*.jsonl`) | thư mục cha của memory ở trên | Không bắt buộc; có toàn bộ hội thoại, **không đưa lên git** |
 | 5 bản vẽ đánh giá | `CAD\` (untracked): `P-KT_dieu chinh_2.11.dwg`, `03.Nhà chống rung2-...dwg`, `17.1 LK-E9 BV KHI THAI.dwg`, `C1-DHTG-...dwg`, `D1-DHTG-...dwg` | Chép tay. Không chép các file khoá `.dwl`/`.dwl2` và `*_HVACLOAD.csv` |
+| Bộ bản vẽ thầu cơ điện (bộ đánh giá cho ống và ống gió) | `C:\Users\PC\Desktop\KLG ĐẠT\2. Mechanical Tender Drawing 20261014\` (M-0 → M-7, kèm các xref) | Chép tay nếu cần thử lại. Bản vẽ của khách hàng: chỉ xử lý trên bản sao, không đưa lên git |
+| Bảng ánh xạ dự án (`mep_map`, `HVACNORM`) | `%LOCALAPPDATA%\HvacAiCad\mep_maps\*.json` | Chép nếu đã lưu bảng ánh xạ cho dự án nào; nếu không, lệnh và tool tự đề xuất lại |
 | `venv/`, `cad_addin/bin`, `obj` | trong repo, bị `.gitignore` | Tạo lại ở bước 4 và 6 |
-| Thiết lập các lệnh | `%APPDATA%\HvacAiCadAddin\*.settings` (HVACQTO, HVACROOMS, HVACLOAD, HVACPLACEUNITS, HVACROUTEDRAFT, HVACPLACEODU, HVACRISER…) | Tự tạo khi chạy lệnh |
+| Thiết lập các lệnh | `%APPDATA%\HvacAiCadAddin\*.settings` (HVACQTO, HVACROOMS, HVACLOAD, HVACPLACEUNITS, HVACROUTEDRAFT, HVACPLACEODU, HVACRISER, HVACNORM, HVACDUCTLINE…) | Tự tạo khi chạy lệnh |
 | Cấu hình AI riêng máy | `aitools_config.json` (nếu có) | Chép từ `aitools_config.example.json` |
 | Cache của MCP server | `%LOCALAPPDATA%\HvacAiCad\work\` (DXF đã chuyển, tổng quan, ảnh, log `mcp_server.log`) | Tự tạo lại |
 | File tạm của HVACROOMS / HVACLOAD | `%TEMP%\HvacAiCadAddin\rooms\`, `...\load\` | Tự tạo |
@@ -75,14 +74,18 @@ Agent con đang chạy dở **không** tiếp tục được trên máy khác; g
 
 ## 2. Trạng thái hiện tại
 
-- Nhánh `hvac-room-chain`, HEAD `358dd0d`. Thư mục làm việc sạch, trừ 8 file untracked
-  trong `CAD/` (5 bản vẽ, 2 file khoá `.dwl`, 1 CSV do người dùng tạo khi thử HVACLOAD).
+- Nhánh `main`, HEAD `5d1a2a8`.
+- Thay đổi chưa commit:
+  - toàn bộ việc ngày 23–24/11 (danh sách ở mục 4.2);
+  - các thay đổi người dùng tự làm trong `.vscode/mcp.json`, `.vscode/settings.json`, và file mới `.mcp.json` (cấu hình `hvac-cad` cho Claude Code).
 - Các lệnh trong add-in:
 
 | Lệnh | Việc | Đã thử trong AutoCAD? |
 | --- | --- | --- |
 | `HVACSTRETCH` | Stretch hỗn hợp; từ 20/11 chọn đối tượng như STRETCH gốc | Phần kéo đã ổn; phần chọn đối tượng mới chưa thử |
-| `HVACQTO` | Bóc khối lượng ra `.xml` theo mẫu VRV | Bản có công thức chưa ghi nhận đã thử |
+| `HVACQTO` | Bóc khối lượng ra `.xml` theo mẫu VRV. Từ 23/11: đếm thêm SPLINE/ARC; đọc tag kích thước của HVACNORM; ống khác vật liệu ra dòng "`<mã hệ> - <mô tả>`"; ống gió nét đơn đã gắn tag được tính diện tích; ống đứng có thêm loại PPR/HDPE/uPVC thoát nước | Bản có công thức chưa ghi nhận đã thử; phần mở rộng 23/11 chưa thử tay |
+| **`HVACNORM`** (23/11) | Chuẩn hoá ống và ống gió nét đơn của bản vẽ tư vấn khác: Python `mep_normalize.py` đọc nhãn, hộp thoại *layer → mã hệ*, preview, Yes. Xoá nét trùng, đưa thuộc tính về ByLayer, cắt nét tại chỗ đổi kích thước, chuyển ống trùng vật liệu BOQ sang layer `EIA_1` có sẵn, ghi tag `HVACAI_PIPE`/`HVACAI_DUCT` cho phần còn lại | Chưa (đã chạy không giao diện trên bản sao M-1-07~10 và M-4-12~14) |
+| **`HVACDUCTLINE`** (23–24/11) | Vẽ ống gió (block `REC_`/`Round D` kèm cút, côn, tap) từ nét đơn: chọn nét của một hệ, bấm đầu quạt hoặc AHU | Chưa (đã chạy không giao diện trên bản sao M-4-12~14: 89/89 tuyến; M-4-10~11: 258/296 tuyến) |
 | `HVACCOUNT` | Cộng chiều dài line/pline trên layer `!...x...` | Bản cũ |
 | `HVACDUCT`, `HVACDUCTALIGN` | Vẽ và dóng ống gió | Đã thử một phần |
 | `HVACPIPESIZE` | Tách một đoạn ống nước, đổi layer cỡ ống | Chưa |
@@ -97,13 +100,16 @@ Agent con đang chạy dở **không** tiếp tục được trên máy khác; g
 
 - Chuỗi lệnh đầy đủ: `HVACROOMS → HVACLOAD → HVACPLACEUNITS → HVACPLACEODU →
   HVACROUTEDRAFT → HVACRISER → HVACREFRIG / HVACDRAIN / HVACPOWERWIRE → HVACQTO`.
-- **Phần AI, Phase 1 đã xong (23/11):** `mcp_server.py` + gói `aitools/`. Chưa chạy thử
-  trong Copilot.
-- Test tự động (23/11, tất cả qua): 46 test Python (`discover -s tests`); C#:
-  `RoomsCoreTests` 285, `LoadCoreTests` 168, `UnitCoreTests` 492, `RouteCoreTests` 45 978,
-  `OduRiserCoreTests` 537, `PipeCoreTests` 20 982, `DuctCoreTests` 2 355,
-  `HvacQtoCoreTests` 19 188. Test chạy ngầm trong `accoreconsole`: `tests/DuctAcadTests`,
-  `tests/UnitCoreTests/Acad`, `tests/OduRiserCoreTests/Acad/run-tests.ps1`.
+- Luồng cho bản vẽ của tư vấn khác (23–24/11): `mep_map` (trong Copilot) hoặc `HVACNORM`
+  (trong AutoCAD) → `HVACDUCTLINE` cho ống gió nét đơn → `HVACQTO`.
+- **Phần AI, Phase 1 đã xong (23/11):** `mcp_server.py` + gói `aitools/`.
+  - Có 9 tool; tool thứ 9 là **`mep_map`** (23/11).
+  - Chưa chạy thử trong Copilot. Ngày 24/11 người dùng hỏi cách cho Copilot tự duyệt tool; câu trả lời ở mục 8.
+  - Các lệnh trong AutoCAD chưa được bọc thành tool cho host; hai cách làm ở mục 4.1.
+- Test tự động (24/11, tất cả qua):
+  - 69 test Python (`discover -s tests`).
+  - C#: `RoomsCoreTests` 285, `LoadCoreTests` 168, `UnitCoreTests` 492, `RouteCoreTests` 45 978, `OduRiserCoreTests` 537, `PipeCoreTests` 20 982, `DuctCoreTests` 2 523, `NormCoreTests` 243, `HvacQtoCoreTests` 19 311.
+  - Chạy không giao diện trong `accoreconsole`: `tests/DuctAcadTests`, `tests/UnitCoreTests/Acad`, `tests/OduRiserCoreTests/Acad/run-tests.ps1`, và `tests/NormCoreTests/Acad/run-tests.ps1`. Script cuối đạt 37/37 trên bản vẽ trống, cả AutoCAD 2021 lẫn 2024; có thêm `-RealDwg <dwg>` và `-Duct` để chạy trên bản sao bản vẽ thật.
 
 ## 3. Lịch sử các session
 
@@ -117,6 +123,7 @@ Agent con đang chạy dở **không** tiếp tục được trên máy khác; g
 | 18/11–20/11 | `b10065ed`, `8883f6eb`, `dcac3588`, `a46f08d0` | Usage; registry tự nạp DLL; hỏi đáp HVACREFRIG; viết bản bàn giao đầu tiên. |
 | 21/11 | `be07b05a` | Đề xuất tích hợp AI qua MCP (FastMCP server, cầu nối named pipe, Claude Desktop, các phase 0–4) và nghiên cứu AI nhận dạng tường/ô mở. Xem memory `ai-mcp-integration`. |
 | 21/11–23/11 | `54890397` | **Session chính hiện tại** (máy mới `PC`). `/init` sửa `CLAUDE.md`; cài Python; tầng 0 (đọc kiến trúc); HVACROOMS; HVACLOAD, HVACPLACEUNITS, HVACROUTEDRAFT (3 agent song song); HVACPLACEODU, HVACRISER, cổng dàn lạnh và đi theo hành lang (agent tuần tự); commit lên `hvac-room-chain`; kế hoạch AI 4 phase; so sánh host và giá; bảo mật; Phase 1 MCP server; review repo CAD-MCP. |
+| 23/11 chiều–24/11 | `54890397` (tiếp, sau khi compact) | Khảo sát bộ bản vẽ thầu cơ điện (M-1 cấp thoát nước, M-4 ống gió). Bước 1: `mep_normalize.py` và tool `mep_map`. Bước 2: lệnh `HVACNORM` và phần mở rộng `HVACQTO`. Bước 3: lệnh `HVACDUCTLINE`. Trả lời câu hỏi bọc lệnh thành tool cho host, và cách cho Copilot tự duyệt tool. Xem mục 7.6. |
 
 ## 4. Việc đang dở
 
@@ -140,14 +147,52 @@ Agent con đang chạy dở **không** tiếp tục được trên máy khác; g
    xuất có preview/Yes/No trong AutoCAD, cộng thêm đường **đọc bản vẽ đang mở qua COM**
    (`pywin32`; `live_layers`, `live_selection`, `find_rooms_in_selection`), kết nối
    đúng phiên AutoCAD đang chạy, bỏ qua AutoCAD 2025+.
+7. **Chọn cách bọc `HVACNORM`, `HVACDUCTLINE`, `HVACQTO` thành tool cho host** (hỏi 24/11,
+   chưa trả lời):
+   - **Cách A, Claude đề xuất làm trước** (khoảng 1 session):
+     - Thêm 1 tool, `process_drawing(drawing, map_name, steps, boq)`.
+     - Tool chạy accoreconsole trên **bản sao**, áp HVACNORM, vẽ ống gió, và xuất file BOQ `.xml`.
+     - Điểm gốc của mỗi mạng ống gió được tự đoán: đầu tự do của ống lớn nhất.
+   - **Cách B, Phase 2** (khoảng 2 session):
+     - Cầu nối named pipe tới bản vẽ đang mở, khoảng 3 tool.
+     - Preview và Yes/No vẫn ở trong AutoCAD; người dùng tự chọn điểm gốc ống gió.
+8. **Duyệt tên hạng mục BOQ đã đề xuất** cho ống khác vật liệu: PPR PN10, hoặc PN20 cho
+   nước nóng; HDPE PE100 PN10; uPVC Class 2; inox SUS; thép; đồng. Cấp áp lực hiện là
+   hằng số trong `TakeoffClassifier.DescribePlumbing`, chưa sửa được trong hộp thoại.
 
 ### 4.2 Việc kỹ thuật
 1. **Thử tay** `HVACPLACEODU`, `HVACRISER`, `HVACROUTEDRAFT` bản cổng + hành lang (các
    bước đã gửi người dùng 22/11), và thử Phase 1 trong Copilot (câu hỏi mẫu: "liệt kê bản
    vẽ, cho tôi các mặt bằng của P-KT, thống kê layer tầng 9 và gợi ý layer tường, rồi tìm
    phòng và tính tải lạnh").
-2. **Push** `main` và `hvac-room-chain`, và sau khi thử ổn thì gộp `hvac-room-chain` vào
-   `main`: **người dùng tự làm**. Thay đổi chưa commit hiện có: `docs/SESSION_HANDOFF.md`.
+2. **Thử tay ba lệnh mới**, các bước đã gửi người dùng trong chat; dùng **bản sao** của bản vẽ thầu:
+   - `HVACNORM` trên M-1-07~10; kiểm tra Undo về đúng một bước;
+   - `HVACDUCTLINE` trên M-4-12~14, chọn một mạng EA rồi bấm đầu quạt;
+   - `HVACQTO` trên cùng vùng đó, kiểm tra nhóm "Ống cấp thoát nước và ống khác" và phần ống gió tính từ block.
+   - Thử `mep_map` trong Copilot.
+2b. **Commit và push: người dùng tự làm.** Các file chưa commit của ngày 23–24/11:
+   - Mới:
+     - Python: `mep_normalize.py`, `aitools/mep.py`, `tests/test_mep_normalize.py`;
+     - `cad_addin/src/`: `HvacNorm.cs`, `NormCore.cs`, `NormExchange.cs`, `NormForm.cs`, `NormWriter.cs`, `SizeTagCore.cs`, `HvacDuctLine.cs`, `DuctLineCore.cs`, `DuctLineWriter.cs`, `DuctLineForm.cs`;
+     - test C#: `tests/NormCoreTests/` (cả `Acad/`), `tests/HvacQtoCoreTests/TagTests.cs`, `tests/DuctCoreTests/DuctLineTests.cs`.
+   - Sửa:
+     - code: `HvacQuantityTakeoff.cs`, `HvacQuantityTakeoffCore.cs`, `mcp_server.py`;
+     - test: `tests/test_aitools.py`; `FormulaTests.cs`, `Program.cs`, `.csproj` của `HvacQtoCoreTests`; `Program.cs`, `.csproj` của `DuctCoreTests`;
+     - tài liệu: `CLAUDE.md`, `docs/AI_MCP_PLAN.md`, `docs/SESSION_HANDOFF.md`.
+   - Commit message gợi ý: `Add mep_map, HVACNORM and HVACDUCTLINE; size tags in HVACQTO`.
+2c. **Giới hạn của chuỗi mới, chưa sửa:**
+   - `mep_map`/`HVACNORM`: các nhánh lặp kiểu "điển hình" không có nhãn thì không đoán
+     được kích thước. Mức "thấp" (lấy kích thước qua chỗ rẽ nhánh) có thể gán cỡ ống chính
+     cho nhánh nhỏ, nên người dùng phải soát preview. Dải chú giải layer 3 m vẫn bị
+     `HVACQTO` đếm nếu quét chọn trúng.
+   - `HVACDUCTLINE`:
+     - nhánh quá ngắn so với tap cộng cút, hoặc chỗ vòng gấp hơn 170°, thì không vẽ (giữ nét đơn, báo đỏ);
+     - ở T chia đôi (bullhead), nhánh còn lại không có tap;
+     - nhánh xiên không có tap;
+     - tap có thể chồng lên côn khi ống chính đổi cỡ ngay tại chữ T;
+     - chiều tap luôn hướng về phía gốc.
+   - Ống gió nét đơn chỉ được gắn tag, **không** đổi layer, để khỏi đếm hai lần khi
+     `HVACDUCTLINE` vẽ block. Đây là quyết định của Claude, đã báo người dùng.
 3. **Giới hạn đã biết, chưa sửa:**
    - Không gian mở bị gộp thành một phòng; người dùng tách bằng nét `HVAC-ROOM-SPLIT`.
    - Tên phòng là chữ dài nhất trong phòng, có khi nhặt nhầm ghi chú cửa.
@@ -213,6 +258,20 @@ Agent con đang chạy dở **không** tiếp tục được trên máy khác; g
   preview và Yes/No, không có tool chạy lệnh tuỳ ý.
 - Chế độ bảo mật `normal` / `redact` / `numbers_only`; mức trong cấu hình là mức tối thiểu.
 
+**Chuẩn hoá ống, ống gió và lập lại BOQ (23/11)**
+- **Ít tool:**
+  - Phía host chỉ có `mep_map`.
+  - Phía AutoCAD có hai lệnh `HVACNORM` và `HVACDUCTLINE`.
+  - BOQ vẫn lập bằng `HVACQTO` (mở rộng), không thêm tool BOQ riêng.
+- **AI nhận diện layer:** AI nhận diện layer của tư vấn khác và đưa về chuẩn template. Kích thước còn thiếu được đoán từ chữ gần ống.
+- **Không tạo layer mới:**
+  - Ống có vật liệu trùng BOQ (CHW thép, nước ngưng uPVC, ống ga đồng) chuyển sang layer `EIA_1` **có sẵn**, nạp từ template nếu bản vẽ chưa có.
+  - Ống vật liệu khác giữ layer cũ. Trong BOQ, dòng của nó có **tiền tố** = mã hệ trong nhãn (hoặc tên layer cũ), dạng `WS - Ống PPR PN10 D90`.
+  - Tên hạng mục theo vật liệu do Claude đề xuất (người dùng giao "đề xuất thêm").
+- Màu, kiểu nét hoặc độ dày nét bị ghi đè (HIDDEN, màu riêng) là **lỗi ghi đè**, được đưa về ByLayer.
+- Chiều cao ống đứng: **người dùng nhập** trong hộp thoại ống đứng của `HVACQTO`.
+- Ống gió: đọc ống gió nét đơn, và có lệnh vẽ ống gió từ nét đơn giống `HVACREFRIG`/`HVACDRAIN`.
+
 **Git và cách làm việc**
 - **Từ 23/11 người dùng tự làm mọi việc commit, push, gộp nhánh. Claude không commit, không
   push**, chỉ báo các file đã đổi (có thể gợi ý commit message). Các commit trước đó trên
@@ -236,6 +295,9 @@ Memory hiện có trên máy `PC` (thư mục ở mục 1):
 
 4a. **git-user-handles-commits** (feedback, 23/11): người dùng tự commit và push; Claude
    không commit, không push, không đề nghị làm.
+4b. **pipe-audit-boq-tool** (project, 23–24/11): yêu cầu kiểm tra ống theo quy tắc add-in và
+   lập lại BOQ; vị trí bộ bản vẽ thầu; các quyết định ở mục 5; kết quả khảo sát ở mục 7.6;
+   trạng thái 3 bước (đều xong, chờ thử tay và commit).
 
 Memory từ máy cũ, tạo lại nếu cần:
 4. **main-session-delegation** (feedback): session chính điều phối, được tự tạo agent con;
@@ -308,6 +370,55 @@ Memory từ máy cũ, tạo lại nếu cần:
   Phase 2 chỉ nối với phiên AutoCAD đang chạy thật; bỏ qua R25+ (AutoCAD 2025+ dùng
   .NET 8); không áp dụng cho `AcadDir.props`.
 
+### 7.6 Bộ bản vẽ thầu cơ điện (23–24/11)
+
+Thư mục ở mục 1. Bộ này của tư vấn khác: chuẩn layer `M-P-*`, `M-HVAC-*`, `0-M-*`; mặt
+bằng nằm trong xref.
+
+**M-1-01 đến M-1-11 (cấp thoát nước, bếp)**
+
+| Bản vẽ | Nội dung | Kết quả (tính cả mức đoán) |
+| --- | --- | --- |
+| M-1-01, M-1-02 | Sơ đồ nguyên lý (tên tờ trong paper space) | Tool cảnh báo, không tính BOQ |
+| M-1-03~06 | Mặt bằng cấp nước | 99% chiều dài có kích thước |
+| M-1-07~10 | Mặt bằng thoát nước | 85% chiều dài có kích thước |
+| M-1-11 | Thiết bị bếp | Gần như không có ống |
+
+- Kích thước chỉ nằm trong chữ (`WS-PPR-DN90`, `WW-UPVC-DN110, I=1%`). Chữ cao 600 mm, hệ
+  số độ rộng 0,75, đặt ngay sau đầu ống, nên phải đo khoảng cách từ **khung chữ** chứ không
+  từ tâm chữ.
+- Lỗi tìm được ở mặt bằng thoát nước:
+  - 59 SPLINE, khoảng 51 m;
+  - 45 m nét vẽ hai lần;
+  - 111 nét ghi đè kiểu nét HIDDEN;
+  - các khe hở 10–150 mm.
+- Mỗi layout có một dải chú giải layer, mỗi layer một nét 3 m. Khung tên vẽ trên layer `0`
+  trong model space.
+
+**M-4-10~11 (ống gió AHU) và M-4-12~14 (thông gió)**
+- Ống gió vẽ **nét đơn** (đường tâm) trên `M-HVAC-DUCT-SA/RA/OA/EA`:
+  - góc là cung tròn; có cung "vượt" ở chỗ hai ống bắt chéo;
+  - kích thước nằm trong MULTILEADER, ví dụ `SAD-1200x800 / RAD-1200x700` hay `EAD-150ø`;
+  - số miệng gió ghi kiểu `105x(SAG WITH HEPA-600x600)`.
+- Ống gió tươi (`OAD`) nằm trên layer SA, nên nhãn bị gán theo hệ ghi trên nhãn và báo lỗi
+  `system_mismatch`.
+- Các nhánh lặp kiểu "điển hình" không có nhãn, nên M-4-10~11 chỉ có 69% chiều dài có kích
+  thước. M-4-12~14 đạt 85%.
+- Kết quả `HVACDUCTLINE` (bảng dưới) đều chạy không giao diện trên bản sao, không có lỗi ghi.
+
+  | Bản vẽ | Số mạng | Tuyến vẽ được |
+  | --- | --- | --- |
+  | M-4-12~14 | 48 | 89/89 |
+  | M-4-10~11 | 37 | 258/296 |
+
+**Bài học khi đọc nhãn**
+- Cắt nét tại chữ T, và cắt ở giữa hai nhãn khác kích thước trên cùng một đoạn (chỗ đổi
+  tiết diện mà nét đơn không vẽ).
+- Coi tuyến đi thẳng qua chữ T là cùng một tuyến.
+- Phát hiện nét trùng trước khi gán nhãn.
+- Nếu không có ống đúng hệ thì cho nhãn gán sang ống cùng loại ở gần (lượt nới lỏng).
+- Đọc tên tờ trong paper space để nhận ra sơ đồ nguyên lý.
+
 ## 8. Mẹo môi trường
 
 - AutoCAD giữ DLL đã nạp tới khi thoát; build xong phải khởi động lại AutoCAD.
@@ -323,3 +434,11 @@ Memory từ máy cũ, tạo lại nếu cần:
 - `mcp` 2.x: `FastMCP` đổi thành `MCPServer` (`mcp.server.mcpserver`); lỗi phải ném
   `ToolError` thì model mới thấy nội dung; server stdio không được in ra stdout.
 - Usage tính theo tài khoản (cửa sổ 5 giờ và theo tuần), không reset khi mở session mới.
+- Copilot tự duyệt tool (24/11):
+  - Ở hộp xác nhận, bấm mũi tên cạnh **Allow** rồi chọn **Allow in this Workspace** cho từng tool `hvac-cad`. Đây là cách khuyên dùng.
+  - Setting `chat.tools.global.autoApprove` hoặc chế độ **Autopilot** duyệt **mọi** tool, kể cả sửa file và terminal, nên không khuyên dùng với bản vẽ khách hàng.
+  - Lệnh "Reset Tool Confirmations" xoá các quyền đã cho.
+- Script Python sinh code C#: ký tự `\n` trong chuỗi Python dễ bị biến thành xuống dòng
+  thật; sửa file `.cs` bằng công cụ Edit thay cho script.
+- `mep_map` đọc được bản vẽ ngoài `CAD/` nếu đưa đường dẫn đầy đủ; muốn `list_drawings`
+  liệt kê thì thêm thư mục vào `drawing_dirs` trong `aitools_config.json`.

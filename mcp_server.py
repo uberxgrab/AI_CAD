@@ -38,7 +38,9 @@ Read-only tools for HVAC-oriented reading of architectural / MEP drawings. All c
 and sizes are in the drawing units, assumed millimetres. Typical flow: list_drawings ->
 drawing_overview (which plan views exist) -> layer_profile on one plan region (which layers
 are walls) -> render_region to look at it -> find_rooms with the exact wall layer names ->
-cooling_load. Drawings are DXF; a DWG name is converted from a copy automatically (can take
+cooling_load. For MEP drawings from other offices: mep_map (propose which layers are which
+pipe/duct system, confirm with the user, save the map, read the BOQ preview and issues).
+Drawings are DXF; a DWG name is converted from a copy automatically (can take
 minutes for big files). Nothing is ever written to the drawing. The cooling-load table holds
 placeholder W/m2 values. get_privacy_mode tells which text/image limits apply."""
 
@@ -134,6 +136,36 @@ def cooling_load(rooms_json: str, type_overrides: dict[str, str] | None = None,
     maps room id to a type key (e.g. {"R3": "office"}). The W/m2 table is a PLACEHOLDER until
     the user supplies theirs. Returns per-room type and kW, the total and the valid types."""
     return load.cooling_load(rooms_json, type_overrides, safety_factor, privacy_mode)
+
+
+@tool
+def mep_map(drawing: str, layer_map: dict[str, str | dict] | None = None, map_name: str | None = None,
+            region: list[float] | None = None, privacy_mode: str | None = None) -> dict:
+    """Recognise the pipe and single-line duct layers of a drawing from another office and
+    normalise them to the template standard (EIA_1 ...), guessing missing sizes from the text
+    near each pipe. Nothing is written to the drawing (the HVACNORM command in AutoCAD applies
+    the saved result with preview + Yes/No).
+
+    Call it first with only `drawing`: you get `proposal` (per layer: proposed system code,
+    how many size labels point at it and which systems they name, a layer-name guess, length,
+    sample labels), `system_codes` (valid codes: CHWS CHWR CWS CWR HWS HWR COND RP for HVAC
+    pipes with template layers; WS DHW WW SW RW VP PW FP SP CA N2 AR GAS for other pipes; SA RA
+    OA EA TA KE SE PA MA for ducts) and a preview computed with that proposal. Check it with the
+    user, then call again with `layer_map` = {exact layer name: system code} (or {layer:
+    {"system", "material", "prefix"}}) and a `map_name` (the project) to save it; later calls
+    may pass just `map_name`. Do not map layers that hold schematic diagrams or legends.
+
+    Returns `stats` (length in m and the share sized by confidence: layer = the layer name
+    says it, high = a label points at it, medium = carried along a straight run, low = carried
+    across branches, none), `boq_preview` (length per BOQ line: a template layer when the
+    system and material match the BOQ, otherwise prefix + material + size; duct area m2;
+    grille counts from labels like 105x(SAG-600x600)), `issue_counts` and the first `issues`
+    (override = colour/linetype/lineweight not ByLayer, overlap/duplicate, gap, curve_type =
+    SPLINE/ARC, unsized, label_unused, label_conflict, system_mismatch = label names another
+    system than the layer, in_block), `warnings` (e.g. a schematic sheet) and `result_json`,
+    the full per-curve result for HVACNORM. `region` = [minx, miny, maxx, maxy] in mm."""
+    from aitools import mep
+    return mep.mep_map(drawings.resolve_dxf(drawing), layer_map, map_name, region, privacy_mode)
 
 
 @tool

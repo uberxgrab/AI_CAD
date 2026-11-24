@@ -46,6 +46,9 @@ namespace HvacAiCadAddin.Takeoff
 
         public string Layer { get; }
         public double LengthMm { get; }
+
+        /// <summary>The HVACNORM size tag (xdata HVACAI_PIPE / HVACAI_DUCT), or null.</summary>
+        public SizeTag Tag { get; set; }
     }
 
     public sealed class DuctGaugeBand
@@ -239,7 +242,10 @@ namespace HvacAiCadAddin.Takeoff
     {
         Duct,
         Steel,
-        Upvc
+        Upvc,
+        Ppr,
+        Hdpe,
+        UpvcWaste
     }
 
     /// <summary>
@@ -265,7 +271,10 @@ namespace HvacAiCadAddin.Takeoff
     {
         public const double DefaultContingencyFactor = 1.0;
 
-        private static readonly string[] ShaftKindLabels = { "Ống gió", "Ống thép", "Ống nước ngưng" };
+        private static readonly string[] ShaftKindLabels =
+        {
+            "Ống gió", "Ống thép", "Ống nước ngưng", "Ống PPR", "Ống HDPE", "Ống uPVC thoát nước"
+        };
 
         public TakeoffOptions(DuctGaugeSettings gauge, double contingencyFactor, IEnumerable<ShaftPipeInput> shaftPipes)
         {
@@ -521,7 +530,9 @@ namespace HvacAiCadAddin.Takeoff
         None,
         Copper,
         Upvc,
-        Steel
+        Steel,
+        /// <summary>Tagged pipes kept on their own layer (BOQ prefix) and plumbing shaft risers.</summary>
+        Other
     }
 
     public sealed class PipeLayerClassification
@@ -666,6 +677,90 @@ namespace HvacAiCadAddin.Takeoff
                         : "Ống thép hàn mạ kẽm, SCH40 (layer: " + layer + ")";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(material));
+            }
+        }
+
+        /// <summary>A single-line duct tagged by HVACNORM, as a duct size.</summary>
+        public static bool TryReadDuctTag(SizeTag tag, out DuctSize size)
+        {
+            size = null;
+            if (tag == null || tag.Kind != SizeTagKind.Duct || !(tag.SizeMm > 0))
+                return false;
+            if (tag.Round || !(tag.Size2Mm > 0))
+            {
+                size = new DuctSize("Ø" + FormatNumber(tag.SizeMm) + " mm", true, tag.SizeMm, tag.SizeMm);
+                return true;
+            }
+
+            size = new DuctSize(FormatNumber(tag.SizeMm) + " x " + FormatNumber(tag.Size2Mm) + " mm", false,
+                tag.SizeMm, tag.Size2Mm);
+            return true;
+        }
+
+        /// <summary>
+        /// BOQ lines of a tagged pipe kept on its own layer: "&lt;prefix&gt; - &lt;description&gt;" (user decision of
+        /// 2026-11-23). A refrigerant pair gives its gas and liquid line.
+        /// </summary>
+        public static IEnumerable<string> DescribeTaggedPipe(SizeTag tag, string layer)
+        {
+            string prefix = string.IsNullOrWhiteSpace(tag.Prefix) ? tag.System : tag.Prefix.Trim();
+            prefix = string.IsNullOrWhiteSpace(prefix) ? "" : prefix.Trim() + " - ";
+            if (tag.Size2Mm > 0)
+            {
+                yield return prefix + DescribeCopper(tag.SizeMm);
+                yield return prefix + DescribeCopper(tag.Size2Mm);
+                yield break;
+            }
+
+            yield return prefix + DescribePlumbing(tag.Material, tag.SizeMm, tag.System, layer);
+        }
+
+        /// <summary>
+        /// Description of a pipe by material (proposed wording, 2026-11-23). Plastic sizes are outside
+        /// diameters (D), steel and stainless are nominal (DN).
+        /// </summary>
+        public static string DescribePlumbing(string material, double sizeMm, string system, string layer = null)
+        {
+            string d = "D" + FormatNumber(sizeMm);
+            string dn = "DN" + FormatNumber(sizeMm);
+            string mat = (material ?? "").Trim().ToUpperInvariant();
+            string sys = (system ?? "").Trim().ToUpperInvariant();
+            switch (mat)
+            {
+                case "PPR":
+                    return sys == "DHW" ? "Ống PPR PN20 " + d : "Ống PPR PN10 " + d;
+                case "HDPE":
+                    return "Ống HDPE PE100 PN10 " + d;
+                case "UPVC":
+                    return sys == "COND" ? DescribePipe(PipeMaterial.Upvc, sizeMm, layer) : "Ống uPVC Class 2 " + d;
+                case "CPVC":
+                    return "Ống CPVC " + d;
+                case "PE":
+                    return "Ống PE " + d;
+                case "ABS":
+                    return "Ống ABS " + d;
+                case "SUS304":
+                case "SUS316":
+                    return "Ống inox " + mat + " " + dn;
+                case "STEEL":
+                case "GI":
+                    return DescribePipe(PipeMaterial.Steel, sizeMm, layer);
+                case "CU":
+                    return DescribeCopper(sizeMm);
+                default:
+                    return "Ống " + d + " (chưa rõ vật liệu" + (string.IsNullOrEmpty(layer) ? "" : ", layer: " + layer) + ")";
+            }
+        }
+
+        /// <summary>The material of a plumbing shaft riser kind.</summary>
+        public static string ShaftMaterial(ShaftPipeKind kind)
+        {
+            switch (kind)
+            {
+                case ShaftPipeKind.Ppr: return "PPR";
+                case ShaftPipeKind.Hdpe: return "HDPE";
+                case ShaftPipeKind.UpvcWaste: return "UPVC";
+                default: return "";
             }
         }
 
@@ -986,6 +1081,8 @@ namespace HvacAiCadAddin.Takeoff
         public IReadOnlyList<PipeRow> CopperRows { get; internal set; }
         public IReadOnlyList<PipeRow> UpvcRows { get; internal set; }
         public IReadOnlyList<PipeRow> SteelRows { get; internal set; }
+        public IReadOnlyList<PipeRow> OtherRows { get; internal set; }
+        public int TaggedCurveCount { get; internal set; }
         public int NotExportedCurveCount { get; internal set; }
         public IReadOnlyList<string> NotExportedLayers { get; internal set; }
         public int ExcludedPumpBlockCount { get; internal set; }
@@ -1054,9 +1151,31 @@ namespace HvacAiCadAddin.Takeoff
             var pipes = new Dictionary<string, PipeRow>(StringComparer.OrdinalIgnoreCase);
             var notExportedLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int notExported = 0;
+            int tagged = 0;
             foreach (TakeoffCurveInput curve in curves ?? Enumerable.Empty<TakeoffCurveInput>())
             {
                 PipeLayerClassification classification = TakeoffClassifier.ClassifyPipeLayer(curve.Layer);
+                // A size tag counts unless the layer itself names the size (a catalogue layer wins).
+                if (curve.Tag != null && classification.SizesMm.Count == 0)
+                {
+                    QuantityTerm tagTerm = new QuantityTerm(curve.LengthMm / 1000.0, 1, false);
+                    DuctSize tagDuct;
+                    if (curve.Tag.Kind == SizeTagKind.Duct && TakeoffClassifier.TryReadDuctTag(curve.Tag, out tagDuct))
+                    {
+                        belowFirstBand += AddDuct(ducts, bandAreas, settings, tagDuct, tagTerm);
+                        tagged++;
+                        continue;
+                    }
+
+                    if (curve.Tag.Kind == SizeTagKind.Pipe)
+                    {
+                        foreach (string description in TakeoffClassifier.DescribeTaggedPipe(curve.Tag, curve.Layer))
+                            AddPipeRow(pipes, PipeMaterial.Other, description, curve.Tag.SizeMm, tagTerm);
+                        tagged++;
+                        continue;
+                    }
+                }
+
                 if (classification.Material == PipeMaterial.None)
                 {
                     notExported++;
@@ -1084,8 +1203,15 @@ namespace HvacAiCadAddin.Takeoff
 
                 double sizeMm;
                 TakeoffClassifier.TryParseNominalSize(shaft.Size, out sizeMm);
-                PipeMaterial material = shaft.Kind == ShaftPipeKind.Steel ? PipeMaterial.Steel : PipeMaterial.Upvc;
-                AddPipeLength(pipes, material, sizeMm, null, term);
+                if (shaft.Kind == ShaftPipeKind.Steel || shaft.Kind == ShaftPipeKind.Upvc)
+                {
+                    PipeMaterial material = shaft.Kind == ShaftPipeKind.Steel ? PipeMaterial.Steel : PipeMaterial.Upvc;
+                    AddPipeLength(pipes, material, sizeMm, null, term);
+                    continue;
+                }
+
+                AddPipeRow(pipes, PipeMaterial.Other, TakeoffClassifier.DescribePlumbing(
+                    TakeoffClassifier.ShaftMaterial(shaft.Kind), sizeMm, null), sizeMm, term);
             }
 
             return new TakeoffResult
@@ -1104,6 +1230,11 @@ namespace HvacAiCadAddin.Takeoff
                 CopperRows = SortPipes(pipes.Values, PipeMaterial.Copper),
                 UpvcRows = SortPipes(pipes.Values, PipeMaterial.Upvc),
                 SteelRows = SortPipes(pipes.Values, PipeMaterial.Steel),
+                OtherRows = pipes.Values
+                    .Where(row => row.Material == PipeMaterial.Other)
+                    .OrderBy(row => row.Description, TakeoffClassifier.NaturalComparer)
+                    .ToList().AsReadOnly(),
+                TaggedCurveCount = tagged,
                 NotExportedCurveCount = notExported,
                 NotExportedLayers = notExportedLayers
                     .OrderBy(layer => layer, TakeoffClassifier.NaturalComparer)
@@ -1137,7 +1268,12 @@ namespace HvacAiCadAddin.Takeoff
         private static void AddPipeLength(Dictionary<string, PipeRow> pipes, PipeMaterial material,
             double? sizeMm, string layer, QuantityTerm term)
         {
-            string description = TakeoffClassifier.DescribePipe(material, sizeMm, layer);
+            AddPipeRow(pipes, material, TakeoffClassifier.DescribePipe(material, sizeMm, layer), sizeMm, term);
+        }
+
+        private static void AddPipeRow(Dictionary<string, PipeRow> pipes, PipeMaterial material,
+            string description, double? sizeMm, QuantityTerm term)
+        {
             PipeRow row;
             if (!pipes.TryGetValue(description, out row))
             {
@@ -1281,7 +1417,7 @@ namespace HvacAiCadAddin.Takeoff
             int nextDetailRow = 2;
             foreach (DuctSizeRow row in result.DuctSizeRows)
                 nextDetailRow = AddSum(layout, row, "Ống gió " + row.SizeText, row.Terms, nextDetailRow);
-            foreach (PipeRow row in result.CopperRows.Concat(result.UpvcRows).Concat(result.SteelRows))
+            foreach (PipeRow row in result.CopperRows.Concat(result.UpvcRows).Concat(result.SteelRows).Concat(result.OtherRows))
                 nextDetailRow = AddSum(layout, row, row.Description, row.Terms, nextDetailRow);
             return layout;
         }
@@ -1393,7 +1529,8 @@ namespace HvacAiCadAddin.Takeoff
             WriteTitledRow(writer, "group", GroupRowHeight, "I.3", "Ống nước");
             number = WritePipeSubgroup(writer, number, "Ống đồng", result.CopperRows, result, layout);
             number = WritePipeSubgroup(writer, number, "Ống thoát nước ngưng uPVC", result.UpvcRows, result, layout);
-            WritePipeSubgroup(writer, number, "Ống thép hàn mạ kẽm", result.SteelRows, result, layout);
+            number = WritePipeSubgroup(writer, number, "Ống thép hàn mạ kẽm", result.SteelRows, result, layout);
+            WritePipeSubgroup(writer, number, "Ống cấp thoát nước và ống khác (theo tiền tố hệ)", result.OtherRows, result, layout);
 
             WriteTitledRow(writer, "closing", 34.5, null, "TỔNG CỘNG (CHƯA VAT)");
             EndWorksheet(writer);

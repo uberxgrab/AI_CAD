@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\cad_addin\src\DuctGeometryCore.cs" Link="DuctGeometryCore.cs" />
+    <Compile Include="..\..\cad_addin\src\DuctLineCore.cs" Link="DuctLineCore.cs" />
   </ItemGroup>
 
   <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />

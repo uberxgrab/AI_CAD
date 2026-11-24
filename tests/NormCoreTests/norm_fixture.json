@@ -1,0 +1,964 @@
+{
+ "version": 1,
+ "status": "ok",
+ "map_name": "Fixture",
+ "stats": {
+  "curves": 8,
+  "pieces": 12,
+  "length_m": 58.2,
+  "duplicate_m": 2.0,
+  "by_confidence_pct": {
+   "layer": 8.6,
+   "high": 65.3,
+   "medium": 26.1,
+   "low": 0.0,
+   "none": 0.0
+  },
+  "labels": 7,
+  "labels_used": 6,
+  "grille_labels": 1
+ },
+ "warnings": [],
+ "boq_preview": [
+  {
+   "kind": "duct",
+   "line": "EIA_1 OUTSIDE AIR",
+   "material": "GI",
+   "size": "300x300",
+   "length_m": 6.0,
+   "area_m2": 7.2,
+   "by_confidence_m": {
+    "high": 6.0
+   }
+  },
+  {
+   "kind": "duct",
+   "line": "EIA_1 SUPPLY AIR",
+   "material": "GI",
+   "size": "400x300",
+   "length_m": 6.0,
+   "area_m2": 8.4,
+   "by_confidence_m": {
+    "high": 6.0
+   }
+  },
+  {
+   "kind": "duct",
+   "line": "EIA_1 SUPPLY AIR",
+   "material": "GI",
+   "size": "600x300",
+   "length_m": 6.0,
+   "area_m2": 10.8,
+   "by_confidence_m": {
+    "high": 6.0
+   }
+  },
+  {
+   "kind": "pipe",
+   "line": "EIA_1 CHWS DN50",
+   "material": "",
+   "size": "DN50",
+   "length_m": 5.0,
+   "area_m2": null,
+   "by_confidence_m": {
+    "layer": 5.0
+   }
+  },
+  {
+   "kind": "pipe",
+   "line": "WS",
+   "material": "PPR",
+   "size": "D25",
+   "length_m": 15.19,
+   "area_m2": null,
+   "by_confidence_m": {
+    "high": 8.0,
+    "medium": 7.19
+   }
+  },
+  {
+   "kind": "pipe",
+   "line": "WS",
+   "material": "PPR",
+   "size": "D50",
+   "length_m": 10.0,
+   "area_m2": null,
+   "by_confidence_m": {
+    "high": 10.0
+   }
+  },
+  {
+   "kind": "pipe",
+   "line": "WS",
+   "material": "PPR",
+   "size": "D63",
+   "length_m": 10.0,
+   "area_m2": null,
+   "by_confidence_m": {
+    "medium": 8.0,
+    "high": 2.0
+   }
+  },
+  {
+   "kind": "terminal",
+   "line": "SA grille 600x600",
+   "count": 3
+  }
+ ],
+ "issue_counts": {
+  "override": 1,
+  "gap": 1,
+  "curve_type": 1,
+  "label_unused": 1,
+  "system_mismatch": 1
+ },
+ "issues": [
+  {
+   "type": "override",
+   "handle": "34",
+   "layer": "M-P-WS",
+   "detail": "color=1",
+   "point": [
+    10000.0,
+    0.0
+   ]
+  },
+  {
+   "type": "gap",
+   "system": "WS",
+   "gap_mm": 80.0,
+   "point": [
+    10000.0,
+    8000.0
+   ],
+   "handles": [
+    "34",
+    "36"
+   ]
+  },
+  {
+   "type": "curve_type",
+   "handle": "37",
+   "layer": "M-P-WS",
+   "detail": "SPLINE",
+   "point": [
+    15000.0,
+    8000.0
+   ]
+  },
+  {
+   "type": "label_unused",
+   "label": 3,
+   "point": [
+    50962.5,
+    50125.0
+   ],
+   "text": "WS-PPR-DN90",
+   "detail": "no matching pipe/duct near this label"
+  },
+  {
+   "type": "system_mismatch",
+   "label": 6,
+   "point": [
+    2962.5,
+    30275.0
+   ],
+   "text": "OAD-300x300",
+   "detail": "label says OA, layer is SA",
+   "handle": "40",
+   "layer": "M-HVAC-DUCT-SA"
+  }
+ ],
+ "entities": [
+  {
+   "handle": "33",
+   "layer": "M-P-WS",
+   "type": "LWPOLYLINE",
+   "system": "WS",
+   "kind": "pipe",
+   "in_block": false,
+   "overrides": [],
+   "fixes": [
+    "split"
+   ],
+   "groups": [
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 2000.0,
+     "start": [
+      0.0,
+      0.0
+     ],
+     "end": [
+      2000.0,
+      0.0
+     ],
+     "from_mm": 0.0,
+     "size": {
+      "kind": "pipe",
+      "system": "WS",
+      "material": "PPR",
+      "size": 63.0,
+      "prefix": "DN"
+     },
+     "size_text": "D63",
+     "material": "PPR",
+     "confidence": "medium",
+     "duplicate": false,
+     "label": "WS-PPR-DN63",
+     "to_mm": 2000.0,
+     "path": [
+      [
+       0.0,
+       0.0
+      ],
+      [
+       2000.0,
+       0.0
+      ]
+     ],
+     "system": "WS",
+     "target_layer": null,
+     "target_in_drawing": false,
+     "target_in_template": false,
+     "boq_prefix": "WS"
+    },
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 2000.0,
+     "start": [
+      2000.0,
+      0.0
+     ],
+     "end": [
+      4000.0,
+      0.0
+     ],
+     "from_mm": 2000.0,
+     "size": {
+      "kind": "pipe",
+      "system": "WS",
+      "material": "PPR",
+      "size": 63.0,
+      "prefix": "DN"
+     },
+     "size_text": "D63",
+     "material": "PPR",
+     "confidence": "high",
+     "duplicate": false,
+     "label": "WS-PPR-DN63",
+     "to_mm": 4000.0,
+     "path": [
+      [
+       2000.0,
+       0.0
+      ],
+      [
+       4000.0,
+       0.0
+      ]
+     ],
+     "system": "WS",
+     "target_layer": null,
+     "target_in_drawing": false,
+     "target_in_template": false,
+     "boq_prefix": "WS"
+    },
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 6000.0,
+     "start": [
+      4000.0,
+      0.0
+     ],
+     "end": [
+      10000.0,
+      0.0
+     ],
+     "from_mm": 4000.0,
+     "size": {
+      "kind": "pipe",
+      "system": "WS",
+      "material": "PPR",
+      "size": 63.0,
+      "prefix": "DN"
+     },
+     "size_text": "D63",
+     "material": "PPR",
+     "confidence": "medium",
+     "duplicate": false,
+     "label": "WS-PPR-DN63",
+     "to_mm": 10000.0,
+     "path": [
+      [
+       4000.0,
+       0.0
+      ],
+      [
+       10000.0,
+       0.0
+      ]
+     ],
+     "system": "WS",
+     "target_layer": null,
+     "target_in_drawing": false,
+     "target_in_template": false,
+     "boq_prefix": "WS"
+    },
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 10000.0,
+     "start": [
+      10000.0,
+      0.0
+     ],
+     "end": [
+      20000.0,
+      0.0
+     ],
+     "from_mm": 10000.0,
+     "size": {
+      "kind": "pipe",
+      "system": "WS",
+      "material": "PPR",
+      "size": 50.0,
+      "prefix": "DN"
+     },
+     "size_text": "D50",
+     "material": "PPR",
+     "confidence": "high",
+     "duplicate": false,
+     "label": "WS-PPR-DN50",
+     "to_mm": 20000.0,
+     "path": [
+      [
+       10000.0,
+       0.0
+      ],
+      [
+       20000.0,
+       0.0
+      ]
+     ],
+     "system": "WS",
+     "target_layer": null,
+     "target_in_drawing": false,
+     "target_in_template": false,
+     "boq_prefix": "WS"
+    }
+   ]
+  },
+  {
+   "handle": "34",
+   "layer": "M-P-WS",
+   "type": "LINE",
+   "system": "WS",
+   "kind": "pipe",
+   "in_block": false,
+   "overrides": [
+    "color=1"
+   ],
+   "fixes": [
+    "bylayer"
+   ],
+   "groups": [
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 8000.0,
+     "start": [
+      10000.0,
+      0.0
+     ],
+     "end": [
+      10000.0,
+      8000.0
+     ],
+     "from_mm": 0.0,
+     "size": {
+      "kind": "pipe",
+      "system": "WS",
+      "material": "PPR",
+      "size": 25.0,
+      "prefix": "DN"
+     },
+     "size_text": "D25",
+     "material": "PPR",
+     "confidence": "high",
+     "duplicate": false,
+     "label": "WS-PPR-DN25",
+     "to_mm": 8000.0,
+     "path": [
+      [
+       10000.0,
+       0.0
+      ],
+      [
+       10000.0,
+       8000.0
+      ]
+     ],
+     "system": "WS",
+     "target_layer": null,
+     "target_in_drawing": false,
+     "target_in_template": false,
+     "boq_prefix": "WS"
+    }
+   ]
+  },
+  {
+   "handle": "35",
+   "layer": "M-P-WS",
+   "type": "LINE",
+   "system": "WS",
+   "kind": "pipe",
+   "in_block": false,
+   "overrides": [],
+   "fixes": [
+    "delete_duplicate"
+   ],
+   "groups": [
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 2000.0,
+     "start": [
+      2000.0,
+      0.0
+     ],
+     "end": [
+      4000.0,
+      0.0
+     ],
+     "from_mm": 0.0,
+     "size": null,
+     "size_text": null,
+     "material": null,
+     "confidence": "none",
+     "duplicate": true,
+     "label": null,
+     "to_mm": 2000.0,
+     "path": [
+      [
+       2000.0,
+       0.0
+      ],
+      [
+       4000.0,
+       0.0
+      ]
+     ],
+     "system": "WS",
+     "target_layer": null,
+     "target_in_drawing": false,
+     "target_in_template": false,
+     "boq_prefix": "WS"
+    }
+   ]
+  },
+  {
+   "handle": "36",
+   "layer": "M-P-WS",
+   "type": "LINE",
+   "system": "WS",
+   "kind": "pipe",
+   "in_block": false,
+   "overrides": [],
+   "fixes": [],
+   "groups": [
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 4920.0,
+     "start": [
+      10080.0,
+      8000.0
+     ],
+     "end": [
+      15000.0,
+      8000.0
+     ],
+     "from_mm": 0.0,
+     "size": {
+      "kind": "pipe",
+      "system": "WS",
+      "material": "PPR",
+      "size": 25.0,
+      "prefix": "DN"
+     },
+     "size_text": "D25",
+     "material": "PPR",
+     "confidence": "medium",
+     "duplicate": false,
+     "label": "WS-PPR-DN25",
+     "to_mm": 4920.0,
+     "path": [
+      [
+       10080.0,
+       8000.0
+      ],
+      [
+       15000.0,
+       8000.0
+      ]
+     ],
+     "system": "WS",
+     "target_layer": null,
+     "target_in_drawing": false,
+     "target_in_template": false,
+     "boq_prefix": "WS"
+    }
+   ]
+  },
+  {
+   "handle": "37",
+   "layer": "M-P-WS",
+   "type": "SPLINE",
+   "system": "WS",
+   "kind": "pipe",
+   "in_block": false,
+   "overrides": [],
+   "fixes": [],
+   "groups": [
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 2270.4,
+     "start": [
+      15000.0,
+      8000.0
+     ],
+     "end": [
+      17000.0,
+      8000.0
+     ],
+     "from_mm": 0.0,
+     "size": {
+      "kind": "pipe",
+      "system": "WS",
+      "material": "PPR",
+      "size": 25.0,
+      "prefix": "DN"
+     },
+     "size_text": "D25",
+     "material": "PPR",
+     "confidence": "medium",
+     "duplicate": false,
+     "label": "WS-PPR-DN25",
+     "to_mm": 2270.4,
+     "path": [
+      [
+       15000.0,
+       8000.0
+      ],
+      [
+       15250.0,
+       8183.6
+      ],
+      [
+       15500.0,
+       8343.8
+      ],
+      [
+       15750.0,
+       8457.0
+      ],
+      [
+       16000.0,
+       8500.0
+      ],
+      [
+       16250.0,
+       8457.0
+      ],
+      [
+       16500.0,
+       8343.8
+      ],
+      [
+       16750.0,
+       8183.6
+      ],
+      [
+       17000.0,
+       8000.0
+      ]
+     ],
+     "system": "WS",
+     "target_layer": null,
+     "target_in_drawing": false,
+     "target_in_template": false,
+     "boq_prefix": "WS"
+    }
+   ]
+  },
+  {
+   "handle": "3C",
+   "layer": "M-HVAC-DUCT-SA",
+   "type": "LINE",
+   "system": "SA",
+   "kind": "duct",
+   "in_block": false,
+   "overrides": [],
+   "fixes": [
+    "split"
+   ],
+   "groups": [
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 6000.0,
+     "start": [
+      0.0,
+      20000.0
+     ],
+     "end": [
+      6000.0,
+      20000.0
+     ],
+     "from_mm": 0.0,
+     "size": {
+      "kind": "duct",
+      "system": "SA",
+      "width": 600.0,
+      "height": 300.0
+     },
+     "size_text": "600x300",
+     "material": null,
+     "confidence": "high",
+     "duplicate": false,
+     "label": "SAD-600x300",
+     "to_mm": 6000.0,
+     "path": [
+      [
+       0.0,
+       20000.0
+      ],
+      [
+       6000.0,
+       20000.0
+      ]
+     ],
+     "system": "SA",
+     "target_layer": "EIA_1 SUPPLY AIR",
+     "target_in_drawing": false,
+     "target_in_template": true,
+     "boq_prefix": null
+    },
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 6000.0,
+     "start": [
+      6000.0,
+      20000.0
+     ],
+     "end": [
+      12000.0,
+      20000.0
+     ],
+     "from_mm": 6000.0,
+     "size": {
+      "kind": "duct",
+      "system": "SA",
+      "width": 400.0,
+      "height": 300.0
+     },
+     "size_text": "400x300",
+     "material": null,
+     "confidence": "high",
+     "duplicate": false,
+     "label": "SAD-400x300",
+     "to_mm": 12000.0,
+     "path": [
+      [
+       6000.0,
+       20000.0
+      ],
+      [
+       12000.0,
+       20000.0
+      ]
+     ],
+     "system": "SA",
+     "target_layer": "EIA_1 SUPPLY AIR",
+     "target_in_drawing": false,
+     "target_in_template": true,
+     "boq_prefix": null
+    }
+   ]
+  },
+  {
+   "handle": "40",
+   "layer": "M-HVAC-DUCT-SA",
+   "type": "LINE",
+   "system": "SA",
+   "kind": "duct",
+   "in_block": false,
+   "overrides": [],
+   "fixes": [],
+   "groups": [
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 6000.0,
+     "start": [
+      0.0,
+      30000.0
+     ],
+     "end": [
+      6000.0,
+      30000.0
+     ],
+     "from_mm": 0.0,
+     "size": {
+      "kind": "duct",
+      "system": "OA",
+      "width": 300.0,
+      "height": 300.0
+     },
+     "size_text": "300x300",
+     "material": null,
+     "confidence": "high",
+     "duplicate": false,
+     "label": "OAD-300x300",
+     "to_mm": 6000.0,
+     "path": [
+      [
+       0.0,
+       30000.0
+      ],
+      [
+       6000.0,
+       30000.0
+      ]
+     ],
+     "system": "OA",
+     "target_layer": "EIA_1 OUTSIDE AIR",
+     "target_in_drawing": false,
+     "target_in_template": true,
+     "boq_prefix": null
+    }
+   ]
+  },
+  {
+   "handle": "43",
+   "layer": "EIA_1 CHWS DN50",
+   "type": "LINE",
+   "system": "CHWS",
+   "kind": "pipe",
+   "in_block": false,
+   "overrides": [],
+   "fixes": [],
+   "groups": [
+    {
+     "seg_from": 0,
+     "seg_to": 0,
+     "length_mm": 5000.0,
+     "start": [
+      0.0,
+      40000.0
+     ],
+     "end": [
+      5000.0,
+      40000.0
+     ],
+     "from_mm": 0.0,
+     "size": {
+      "kind": "pipe",
+      "system": "CHWS",
+      "size": 50.0,
+      "prefix": "DN"
+     },
+     "size_text": "DN50",
+     "material": null,
+     "confidence": "layer",
+     "duplicate": false,
+     "label": null,
+     "to_mm": 5000.0,
+     "path": [
+      [
+       0.0,
+       40000.0
+      ],
+      [
+       5000.0,
+       40000.0
+      ]
+     ],
+     "system": "CHWS",
+     "target_layer": "EIA_1 CHWS DN50",
+     "target_in_drawing": true,
+     "target_in_template": true,
+     "boq_prefix": null
+    }
+   ]
+  }
+ ],
+ "labels": [
+  {
+   "text": "WS-PPR-DN63",
+   "point": [
+    3962.5,
+    275.0
+   ],
+   "arrows": [],
+   "used": true,
+   "items": [
+    {
+     "kind": "pipe",
+     "system": "WS",
+     "material": "PPR",
+     "size": 63.0,
+     "prefix": "DN"
+    }
+   ]
+  },
+  {
+   "text": "WS-PPR-DN50",
+   "point": [
+    15962.5,
+    275.0
+   ],
+   "arrows": [],
+   "used": true,
+   "items": [
+    {
+     "kind": "pipe",
+     "system": "WS",
+     "material": "PPR",
+     "size": 50.0,
+     "prefix": "DN"
+    }
+   ]
+  },
+  {
+   "text": "WS-PPR-DN25",
+   "point": [
+    10025.0,
+    3962.5
+   ],
+   "arrows": [],
+   "used": true,
+   "items": [
+    {
+     "kind": "pipe",
+     "system": "WS",
+     "material": "PPR",
+     "size": 25.0,
+     "prefix": "DN"
+    }
+   ]
+  },
+  {
+   "text": "WS-PPR-DN90",
+   "point": [
+    50962.5,
+    50125.0
+   ],
+   "arrows": [],
+   "used": false,
+   "items": [
+    {
+     "kind": "pipe",
+     "system": "WS",
+     "material": "PPR",
+     "size": 90.0,
+     "prefix": "DN"
+    }
+   ]
+  },
+  {
+   "text": "SAD-600x300",
+   "point": [
+    5562.5,
+    21075.0
+   ],
+   "arrows": [
+    [
+     3000.0,
+     20000.0
+    ]
+   ],
+   "used": true,
+   "items": [
+    {
+     "kind": "duct",
+     "system": "SA",
+     "width": 600.0,
+     "height": 300.0
+    }
+   ]
+  },
+  {
+   "text": "SAD-400x300",
+   "point": [
+    10015.4,
+    21498.0
+   ],
+   "arrows": [
+    [
+     9000.0,
+     20000.0
+    ]
+   ],
+   "used": true,
+   "items": [
+    {
+     "kind": "duct",
+     "system": "SA",
+     "width": 400.0,
+     "height": 300.0
+    }
+   ]
+  },
+  {
+   "text": "OAD-300x300",
+   "point": [
+    2962.5,
+    30275.0
+   ],
+   "arrows": [],
+   "used": true,
+   "items": [
+    {
+     "kind": "duct",
+     "system": "OA",
+     "width": 300.0,
+     "height": 300.0
+    }
+   ]
+  },
+  {
+   "text": "3x(SAG-600x600)",
+   "point": [
+    9312.5,
+    32125.0
+   ],
+   "arrows": [],
+   "used": false,
+   "items": [
+    {
+     "kind": "terminal",
+     "system": "SA",
+     "width": 600.0,
+     "height": 600.0,
+     "count": 3
+    }
+   ]
+  }
+ ],
+ "map": {
+  "M-P-WS": {
+   "system": "WS"
+  },
+  "M-HVAC-DUCT-SA": {
+   "system": "SA"
+  }
+ },
+ "map_proposed": false
+}

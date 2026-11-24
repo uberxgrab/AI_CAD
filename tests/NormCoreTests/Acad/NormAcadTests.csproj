@@ -1,0 +1,59 @@
+<Project>
+  <!--
+    Headless accoreconsole test of HVACNORM end to end without the dialog: entities drawn in a blank drawing,
+    the DXF snapshot with its handle map, mep_normalize.py run as a separate python.exe, the planner, layer
+    import from a copy of the template, NormWriter, then the HVACQTO core on the result. The DLL links the
+    sources it tests and references only AcDbMgd and AcCoreMgd (never AcMgd). Run it with run-tests.ps1.
+  -->
+  <PropertyGroup>
+    <NormAcadBuildRoot>$([System.IO.Path]::GetTempPath())NormAcadTests\</NormAcadBuildRoot>
+    <BaseIntermediateOutputPath>$(NormAcadBuildRoot)obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(NormAcadBuildRoot)bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>NormAcadTests</RootNamespace>
+    <AssemblyName>NormAcadTests</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <Import Project="..\..\..\cad_addin\AcadDir.props" />
+
+  <ItemGroup>
+    <Compile Include="NormAcadTests.cs" />
+    <Compile Include="..\..\..\cad_addin\src\NormCore.cs" Link="NormCore.cs" />
+    <Compile Include="..\..\..\cad_addin\src\SizeTagCore.cs" Link="SizeTagCore.cs" />
+    <Compile Include="..\..\..\cad_addin\src\NormExchange.cs" Link="NormExchange.cs" />
+    <Compile Include="..\..\..\cad_addin\src\NormWriter.cs" Link="NormWriter.cs" />
+    <Compile Include="..\..\..\cad_addin\src\RoomsCore.cs" Link="RoomsCore.cs" />
+    <Compile Include="..\..\..\cad_addin\src\RoomsExchange.cs" Link="RoomsExchange.cs" />
+    <Compile Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <Compile Include="..\..\..\cad_addin\src\HvacQuantityTakeoffCore.cs" Link="HvacQuantityTakeoffCore.cs" />
+    <Compile Include="..\..\..\cad_addin\src\DuctGeometryCore.cs" Link="DuctGeometryCore.cs" />
+    <Compile Include="..\..\..\cad_addin\src\DuctBlockLibrary.cs" Link="DuctBlockLibrary.cs" />
+    <Compile Include="..\..\..\cad_addin\src\DynamicBlockHelpers.cs" Link="DynamicBlockHelpers.cs" />
+    <Compile Include="..\..\..\cad_addin\src\DuctLineCore.cs" Link="DuctLineCore.cs" />
+    <Compile Include="..\..\..\cad_addin\src\DuctLineWriter.cs" Link="DuctLineWriter.cs" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Xml" />
+    <Reference Include="AcDbMgd">
+      <HintPath>$(AcadDir)\acdbmgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="AcCoreMgd">
+      <HintPath>$(AcadDir)\accoremgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

@@ -54,7 +54,7 @@ namespace HvacQtoCoreTests
             TakeoffOptions options = TakeoffOptions.CreateDefault();
             Check.Near("f default factor is 1.0", 1.0, options.ContingencyFactor);
             Check.Equal("f default has no shaft rows", 0, options.ShaftPipes.Count);
-            Check.Sequence("f shaft kinds offered", new[] { "Ống gió", "Ống thép", "Ống nước ngưng" },
+            Check.Sequence("f shaft kinds offered", new[] { "Ống gió", "Ống thép", "Ống nước ngưng", "Ống PPR", "Ống HDPE", "Ống uPVC thoát nước" },
                 TakeoffOptions.ShaftKindNames);
         }
 

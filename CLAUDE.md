@@ -40,6 +40,14 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
     `HVACDUCTALIGN` on copies of the template, run by `run-tests.ps1`. It links the
     duct sources from `cad_addin/src/` and references only `acdbmgd`/`accoremgd`.
     `tests/PipeAcadTests` is planned but not written.
+  - `tests/NormCoreTests/`: C# console tests for the `HVACNORM` core (`norm_fixture.json`
+    is a real `mep_normalize.py` result of the Python test fixture; regenerate it when the
+    contract changes). `tests/NormCoreTests/Acad/run-tests.ps1` runs the whole pipeline
+    headless (blank drawing, snapshot, Python, planner, template layer import, writer,
+    takeoff) and `HVACDUCTLINE` on a blank drawing; `-RealDwg <dwg>` runs `HVACNORM` on a
+    copy of a real drawing, `-RealDwg <dwg> -Duct` then also draws every duct network.
+    `HVACDUCTLINE` core tests are in `tests/DuctCoreTests/DuctLineTests.cs`. Same rule:
+    outside `cad_addin/`.
   - `tests/RoomsCoreTests/`, `tests/LoadCoreTests/`, `tests/UnitCoreTests/`,
     `tests/RouteCoreTests/`, `tests/OduRiserCoreTests/`: C# console tests for the
     AutoCAD-free cores of `HVACROOMS`, `HVACLOAD`, `HVACPLACEUNITS`,
@@ -51,13 +59,24 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
     `MCPServer` from `mcp.server.mcpserver`, not v1 `FastMCP`; stdio, never print to
     stdout) with tools `list_drawings`, `convert_dwg` (accoreconsole on a copy,
     AUDIT + DXFOUT, cached in `%LOCALAPPDATA%\HvacAiCad\work`), `drawing_overview`,
-    `layer_profile`, `render_region`, `find_rooms`, `cooling_load`,
+    `layer_profile`, `render_region`, `find_rooms`, `cooling_load`, `mep_map`,
     `get_privacy_mode`. Privacy modes `normal` / `redact` / `numbers_only`; the
     mode in `aitools_config.json` (git-ignored; see `aitools_config.example.json`)
     is a minimum that a call may only tighten. Failures must be raised as
     `ToolError` or the model only sees a generic error. Host: VS Code + GitHub
     Copilot agent mode via `.vscode/mcp.json`. Tests: `tests/test_aitools.py`
     (includes a real stdio client round trip).
+  - `mep_normalize.py`: pipe and single-line duct normalisation for drawings from other
+    offices (back end of the `mep_map` MCP tool, and of the planned `HVACNORM` command via
+    `--request`). A map (layer -> system code: CHWS, COND, RP, WS, WW, SA, ...) says which
+    layers are which system; sizes come from the layer name, or from the size labels
+    (TEXT/MTEXT/MULTILEADER/LEADER, hand-drawn leader lines on note layers) assigned to the
+    nearest piece and carried along runs (confidence layer/high/medium/low/none). Pieces are
+    cut at tees and halfway between two different labels on one piece. User decisions of
+    2026-11-23: no new layers; a system whose material is the BOQ material goes to its
+    existing EIA_1 layer, any other material keeps its layer and gets a BOQ prefix (the
+    label's system code, e.g. `WS`); colour/linetype/lineweight overrides are errors. Maps
+    are saved in `%LOCALAPPDATA%\HvacAiCad\mep_maps\`, results in the work folder `mep\`.
   - `heat_load.py` + `heat_load_table.json`: the `HVACLOAD` back end. The W/m² values
     in the table are PLACEHOLDERS until the user sends their own table; all values,
     keywords and labels are read from the file.
@@ -129,7 +148,9 @@ parser.load_dxf -> extract_entities      RawEntity
 | Command | Source | Behavior |
 | --- | --- | --- |
 | `HVACSTRETCH` | `cad_addin/src/HvacStretch.cs` | Mixed native/dynamic stretch from one AutoCAD object selection (crossing/window, polygon, picks, Shift-removal). Main current feature. |
-| `HVACQTO` | `cad_addin/src/HvacQuantityTakeoff.cs`, `HvacQuantityTakeoffCore.cs`, `TakeoffSettingsForm.cs` | Exports the pickfirst set, or a new `GetSelection`, to a SpreadsheetML `.xml` workbook laid out like the VRV quotation template, with formulas and a contingency factor cell. |
+| `HVACQTO` | `cad_addin/src/HvacQuantityTakeoff.cs`, `HvacQuantityTakeoffCore.cs`, `TakeoffSettingsForm.cs`, `SizeTagCore.cs` | Exports the pickfirst set, or a new `GetSelection`, to a SpreadsheetML `.xml` workbook laid out like the VRV quotation template, with formulas and a contingency factor cell. Also counts SPLINE/ARC lengths and reads the `HVACNORM` size tags: a tagged pipe whose layer names no size becomes "`<prefix> - <description>`" in the subgroup "Ống cấp thoát nước và ống khác" (PPR PN10/PN20 for DHW, HDPE PE100 PN10, uPVC Class 2, inox SUS, steel, copper; proposed wording); a tagged single-line duct counts as a duct size. Shaft risers also offer PPR, HDPE and uPVC waste. |
+| `HVACDUCTLINE` | `cad_addin/src/HvacDuctLine.cs`, `DuctLineCore.cs`, `DuctLineWriter.cs`, `DuctLineForm.cs` | Draws a single-line duct network (centrelines of another office) as `REC_`/`Round D` blocks and fittings. Select the lines of one system, pick the fan / AHU end. `DuctLinePlanner`: bend arcs become corners, hop arcs (collinear legs) and splines become chords; ends within the weld tolerance (default 100 mm) join and an end on a segment splits it (tee), only within one group (tagged system, else layer); tree from the root (loops and unconnected parts reported); a run goes straight through tees, turns at single-child nodes, follows the larger side at a bullhead; a square branch starts with a tap on the incoming duct's side wall (lead-in toward the root), an angled one starts free. Each run is solved with the `HVACDUCT` `RouteSolver` (HVACDUCT fitting settings); runs too short for their fittings are previewed red and left as lines. Sizes from `HVACNORM` tags (untagged: dialog size), layer by system (SA → `EIA_1 SUPPLY AIR`, RA, OA, EA, TA, KE, SE, PA, MA; else the dialog layer, imported from the template). Single lines erased or kept with their size tag removed (no double count in `HVACQTO`). Headless-verified: copies of M-4-12~14 (48 networks, 89/89 runs) and M-4-10~11 (258/296 runs). Dialog, pick and preview need in-AutoCAD testing. |
+| `HVACNORM` | `cad_addin/src/HvacNorm.cs`, `NormCore.cs`, `NormExchange.cs`, `NormWriter.cs`, `NormForm.cs`, `SizeTagCore.cs`; back end `mep_normalize.py` | Normalises the pipes and single-line ducts of another office's drawing. Selection → DXF snapshot (with a snapshot-handle → drawing-object map) → `mep_normalize.py` with the saved project map (`%LOCALAPPDATA%\HvacAiCad\mep_maps\`, shared with the `mep_map` MCP tool) or a proposal → dialog (system per layer, map name, lowest confidence applied, fixes) → rerun if the map changed → preview (green moved, cyan tagged, red erased, magenta override reset, grey no size, yellow circle gap) → Yes, one undo group: duplicates erased, overrides reset to ByLayer, curves cut at size changes (`GetSplitCurves`), BOQ-material pipes moved to existing EIA_1 layers (imported from the template, never invented), others tagged with xdata `HVACAI_PIPE` / `HVACAI_DUCT` (see `SizeTagCore.cs`). Single-line ducts are only tagged, never moved (`HVACDUCTLINE` draws them). Writer verified headless on 2021/2024 and on copies of tender drawings; dialog and preview need in-AutoCAD testing. |
 | `HVACCOUNT` | `cad_addin/src/TQO.cs` | Totals `Line` and `Polyline` lengths on layers that start with `!` and contain `x` (case-insensitive). |
 | `HVACDUCT` | `cad_addin/src/HvacDuctDraw.cs`, `DuctRouteSession.cs`, `DuctDrawForm.cs`, `DuctBlockLibrary.cs`, `DuctGeometryCore.cs` | Draws duct runs as `REC_WxH`/`Round D` dynamic blocks on a template system layer (`Next point or [Size/Undo] <length>:` loop with `PointMonitor` preview). Continues from a duct end, branches with a tap from a side wall, and generates elbows, transitions and taps as polylines tagged `HVACAI_FITTING`, shortening `Distance3` by the takeups. Missing sizes are imported or cloned from the template. Fitting formulas (SMACNA-based) are in `AGENTS.md`. Partly tested in AutoCAD. |
 | `HVACDUCTALIGN` | `cad_addin/src/HvacDuctAlign.cs`, `DuctAligner.cs` | Revit-style Align: pick a reference edge (nested in a duct or a plain curve), then a parallel duct edge, which is moved to be collinear (`Multiple` keeps the reference). Coaxial facing ducts are joined without asking (merged, resized, or with an eccentric transition); an end face at right angles to a side wall gets a tap. |
@@ -182,7 +203,7 @@ parser.load_dxf -> extract_entities      RawEntity
 | Rooms → units → rough routes | `HVACROOMS` → `HVACLOAD` → `HVACPLACEUNITS` → `HVACPLACEODU` → `HVACROUTEDRAFT` → `HVACRISER` → existing `HVACREFRIG`/`HVACDRAIN`/`HVACPOWERWIRE` → `HVACQTO` | Each step is a separate command with preview and one undo group. The user tested the first four in AutoCAD on 2026-11-22 (relatively few bugs, not listed yet). `HVACPLACEODU`, `HVACRISER` and the port/corridor routing were added the same day and are not yet tested interactively. |
 | DXF validation / AI error detection | Rule-based foundation | Deterministic checks only. AI inference, labelled data, and CAD-facing review workflows are planned. |
 | Room extraction (tầng 0) | Prototype + `HVACROOMS` | Geometry only. Real-drawing limits: open-plan spaces merge (use `HVAC-ROOM-SPLIT`), openings wider than 1800 mm or single-line walls leak, the room name is the longest text inside. `DT. x M2` labels in the sample drawing are whole-unit areas, so they only roughly score rooms. |
-| Automated tests | Python, C# cores, headless writers | 46 Python tests (`discover -s tests`, incl. the MCP stdio round trip); C# cores in `tests/HvacQtoCoreTests/`, `PipeCoreTests/`, `DuctCoreTests/`, `RoomsCoreTests/`, `LoadCoreTests/`, `UnitCoreTests/`, `RouteCoreTests/`, `OduRiserCoreTests/`. `tests/DuctAcadTests/`, `tests/UnitCoreTests/Acad/` and `tests/OduRiserCoreTests/Acad/` run non-interactive writer code in `accoreconsole`. Jigs, previews, osnap and picking have no automated tests, so commands must still be tested manually in AutoCAD. |
+| Automated tests | Python, C# cores, headless writers | 69 Python tests (`discover -s tests`, incl. the MCP stdio round trip); C# cores in `tests/HvacQtoCoreTests/`, `PipeCoreTests/`, `DuctCoreTests/`, `RoomsCoreTests/`, `LoadCoreTests/`, `UnitCoreTests/`, `RouteCoreTests/`, `OduRiserCoreTests/`, `NormCoreTests/`. `tests/DuctAcadTests/`, `tests/UnitCoreTests/Acad/`, `tests/OduRiserCoreTests/Acad/` and `tests/NormCoreTests/Acad/` run non-interactive writer code in `accoreconsole`. Jigs, previews, osnap and picking have no automated tests, so commands must still be tested manually in AutoCAD. |
 
 ## Next steps
 
@@ -287,6 +308,10 @@ dotnet run --project tests\LoadCoreTests\LoadCoreTests.csproj -c Debug
 dotnet run --project tests\UnitCoreTests\UnitCoreTests.csproj -c Debug
 dotnet run --project tests\RouteCoreTests\RouteCoreTests.csproj -c Debug
 dotnet run --project tests\OduRiserCoreTests\OduRiserCoreTests.csproj -c Debug
+dotnet run --project tests\NormCoreTests\NormCoreTests.csproj -c Debug
+
+# HVACNORM end to end in accoreconsole (blank drawing), or on a copy of a real drawing
+powershell -File tests\NormCoreTests\Acad\run-tests.ps1 [-AcadDir "C:\Program Files\Autodesk\AutoCAD 2021"] [-RealDwg <dwg>]
 
 # Tầng 0: automatic prototype on a whole DXF, or the HVACROOMS back end on a request
 venv\Scripts\python.exe arch_extract.py --input plan.dxf --out-dir out\arch [--config c.json]

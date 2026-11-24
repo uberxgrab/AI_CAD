@@ -6,6 +6,7 @@ using Autodesk.AutoCAD.ApplicationServices;
 using Autodesk.AutoCAD.DatabaseServices;
 using Autodesk.AutoCAD.EditorInput;
 using Autodesk.AutoCAD.Runtime;
+using HvacAiCadAddin.Norm;
 using HvacAiCadAddin.Takeoff;
 
 namespace HvacAiCadAddin.Commands
@@ -31,7 +32,7 @@ namespace HvacAiCadAddin.Commands
             {
                 SelectionFilter filter = new SelectionFilter(new[]
                 {
-                    new TypedValue((int)DxfCode.Start, "INSERT,LINE,LWPOLYLINE,POLYLINE")
+                    new TypedValue((int)DxfCode.Start, "INSERT,LINE,LWPOLYLINE,POLYLINE,SPLINE,ARC")
                 });
                 selection = editor.GetSelection(filter);
                 if (selection.Status != PromptStatus.OK)
@@ -93,12 +94,13 @@ namespace HvacAiCadAddin.Commands
                         length = ((Line)entity).Length;
                     else if (entity is Polyline)
                         length = ((Polyline)entity).Length;
-                    else if (entity is Polyline2d || entity is Polyline3d)
+                    else if (entity is Polyline2d || entity is Polyline3d || entity is Spline || entity is Arc)
                         length = GetCurveLength(entity);
                     else
                         continue;
 
-                    curves.Add(new TakeoffCurveInput(entity.Layer, length));
+                    // HVACNORM size tags (pipes kept on another office's layer, single-line ducts).
+                    curves.Add(new TakeoffCurveInput(entity.Layer, length) { Tag = NormWriter.ReadTag(entity) });
                 }
                 transaction.Commit();
             }
@@ -115,9 +117,11 @@ namespace HvacAiCadAddin.Commands
             }
 
             editor.WriteMessage(
-                "\nHVAC takeoff saved: {0}\nEquipment rows: {1}; duct sizes: {2}; copper rows: {3}; uPVC rows: {4}; steel rows: {5}",
+                "\nHVAC takeoff saved: {0}\nEquipment rows: {1}; duct sizes: {2}; copper rows: {3}; uPVC rows: {4}; steel rows: {5}; other pipe rows: {6}",
                 file.StringResult, result.EquipmentRows.Count, result.DuctSizeRows.Count,
-                result.CopperRows.Count, result.UpvcRows.Count, result.SteelRows.Count);
+                result.CopperRows.Count, result.UpvcRows.Count, result.SteelRows.Count, result.OtherRows.Count);
+            if (result.TaggedCurveCount > 0)
+                editor.WriteMessage("\nCurves sized by HVACNORM tags: {0}", result.TaggedCurveCount);
             editor.WriteMessage("\nCurves not exported: {0}", result.NotExportedCurveCount);
             if (result.NotExportedLayers.Count > 0)
             {
