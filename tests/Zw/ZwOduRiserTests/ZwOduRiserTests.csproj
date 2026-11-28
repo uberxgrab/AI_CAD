@@ -1,0 +1,39 @@
+﻿<Project>
+  <!-- ZWCAD twin of tests\OduRiserCoreTests\Acad (same test files, same cad_addin\src files; keep the lists in step). -->
+  <PropertyGroup>
+    <ZwSuite>oduriser</ZwSuite>
+    <RootNamespace>OduRiserAcadTests</RootNamespace>
+    <AssemblyName>OduRiserAcadTests</AssemblyName>
+  </PropertyGroup>
+
+  <Import Project="..\ZwTests.props" />
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="..\..\..\cad_addin\ZwDir.props" />
+
+  <ItemGroup>
+    <ZwMapInput Include="..\..\OduRiserCoreTests\Acad\OduRiserAcadTests.cs" Link="t\%(Filename)%(Extension)" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\DuctGeometryCore.cs" Link="DuctGeometryCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\PipeCatalogCore.cs" Link="PipeCatalogCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\PipeSettingsCore.cs" Link="PipeSettingsCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\PipeNetworkCore.cs" Link="PipeNetworkCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\RefrigCleanerCore.cs" Link="RefrigCleanerCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\NetworkTopologyCore.cs" Link="NetworkTopologyCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\RefrigSizingCore.cs" Link="RefrigSizingCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\OduCore.cs" Link="OduCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\RiserCore.cs" Link="RiserCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\OduWriter.cs" Link="OduWriter.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\RiserWriter.cs" Link="RiserWriter.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <Reference Include="ZwManaged">
+      <HintPath>$(ZwDir)\ZwManaged.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ZwDatabaseMgd">
+      <HintPath>$(ZwDir)\ZwDatabaseMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="..\..\..\cad_addin\ZwMap.targets" />
+</Project>

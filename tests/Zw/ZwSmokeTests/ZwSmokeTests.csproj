@@ -1,0 +1,29 @@
+﻿<Project>
+  <!--
+    Smoke-test DLL, native ZWCAD code (no namespace mapping): checks the add-in loaded into the test
+    instance (HVACZWSMOKE) and ends the run (HVACZWFINISH). Run it with run-zw-tests.ps1.
+  -->
+  <PropertyGroup>
+    <ZwSuite>smoke</ZwSuite>
+    <RootNamespace>ZwSmokeTests</RootNamespace>
+    <AssemblyName>ZwSmokeTests</AssemblyName>
+  </PropertyGroup>
+
+  <Import Project="..\ZwTests.props" />
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="..\..\..\cad_addin\ZwDir.props" />
+
+  <ItemGroup>
+    <Compile Include="SmokeTests.cs" />
+    <Reference Include="ZwManaged">
+      <HintPath>$(ZwDir)\ZwManaged.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ZwDatabaseMgd">
+      <HintPath>$(ZwDir)\ZwDatabaseMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+</Project>

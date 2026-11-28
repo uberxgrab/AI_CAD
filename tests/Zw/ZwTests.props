@@ -1,0 +1,25 @@
+﻿<Project>
+  <!--
+    Common settings of the ZWCAD test DLLs. They run INSIDE a ZWCAD instance (ZWCAD has no console
+    like accoreconsole), started by tests\Zw\run-zw-tests.ps1. A suite project links exactly the
+    test and add-in sources of its accoreconsole twin (the same file lists), and compiles them
+    through the AutoCAD -> ZWCAD namespace mapping of cad_addin\ZwMap.targets, so no test code is
+    forked. Import this file BEFORE Sdk.props and set $(ZwSuite) first. Build folders stay in %TEMP%.
+  -->
+  <PropertyGroup>
+    <ZwTestsBuildRoot>$([System.IO.Path]::GetTempPath())HvacAiZwTests\build\$(ZwSuite)\</ZwTestsBuildRoot>
+    <BaseIntermediateOutputPath>$(ZwTestsBuildRoot)obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(ZwTestsBuildRoot)bin\</BaseOutputPath>
+    <ZwGenDir>$(ZwTestsBuildRoot)gen\</ZwGenDir>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
+    <DefineConstants>$(DefineConstants);ZWCAD</DefineConstants>
+  </PropertyGroup>
+</Project>

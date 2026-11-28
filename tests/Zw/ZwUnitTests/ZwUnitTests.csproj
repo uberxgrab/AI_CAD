@@ -1,0 +1,30 @@
+﻿<Project>
+  <!-- ZWCAD twin of tests\UnitCoreTests\Acad (same test files, same cad_addin\src files; keep the lists in step). -->
+  <PropertyGroup>
+    <ZwSuite>unit</ZwSuite>
+    <RootNamespace>UnitAcadTests</RootNamespace>
+    <AssemblyName>UnitAcadTests</AssemblyName>
+  </PropertyGroup>
+
+  <Import Project="..\ZwTests.props" />
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="..\..\..\cad_addin\ZwDir.props" />
+
+  <ItemGroup>
+    <ZwMapInput Include="..\..\UnitCoreTests\Acad\UnitAcadTests.cs" Link="t\%(Filename)%(Extension)" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\UnitPlacementCore.cs" Link="UnitPlacementCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\UnitPlacementWriter.cs" Link="UnitPlacementWriter.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <Reference Include="ZwManaged">
+      <HintPath>$(ZwDir)\ZwManaged.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ZwDatabaseMgd">
+      <HintPath>$(ZwDir)\ZwDatabaseMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="..\..\..\cad_addin\ZwMap.targets" />
+</Project>

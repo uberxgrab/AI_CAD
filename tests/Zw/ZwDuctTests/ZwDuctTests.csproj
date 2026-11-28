@@ -1,0 +1,33 @@
+﻿<Project>
+  <!-- ZWCAD twin of tests\DuctAcadTests (same test files, same cad_addin\src files; keep the lists in step). -->
+  <PropertyGroup>
+    <ZwSuite>duct</ZwSuite>
+    <RootNamespace>DuctAcadTests</RootNamespace>
+    <AssemblyName>DuctAcadTests</AssemblyName>
+  </PropertyGroup>
+
+  <Import Project="..\ZwTests.props" />
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="..\..\..\cad_addin\ZwDir.props" />
+
+  <ItemGroup>
+    <ZwMapInput Include="..\..\DuctAcadTests\*.cs" Link="t\%(Filename)%(Extension)" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\DuctGeometryCore.cs" Link="DuctGeometryCore.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\DuctBlockLibrary.cs" Link="DuctBlockLibrary.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\DuctRouteSession.cs" Link="DuctRouteSession.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\DuctAligner.cs" Link="DuctAligner.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\DynamicBlockHelpers.cs" Link="DynamicBlockHelpers.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <Reference Include="ZwManaged">
+      <HintPath>$(ZwDir)\ZwManaged.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ZwDatabaseMgd">
+      <HintPath>$(ZwDir)\ZwDatabaseMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="..\..\..\cad_addin\ZwMap.targets" />
+</Project>
