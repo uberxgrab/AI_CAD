@@ -1,0 +1,7 @@
+; HVACDUCT, a two-leg run: start, one corner, end. The LISP (command) cancels the command, which is the only way to end the point loop. ZWCAD ends the script on a cancel, so the dump and the quit are deferred (queued when the command is cancelled).
+HVACDUCT
+0,0
+3000,0
+3000,2000
+(command)
+;;DEFER

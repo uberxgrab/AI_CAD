@@ -1,0 +1,9 @@
+{
+  "scenario": "align_edge",
+  "about": "HVACDUCTALIGN (AGENTS.md): reference = upper edge (y=300) of the first duct, aligned = lower edge (y=900) of the second duct. The second duct is translated perpendicular to the edge by -600 so that the edges are collinear (position (500,1200) -> (500,600)); the ducts are side by side, not coaxial, so nothing is joined and nothing else changes.",
+  "checks": [
+    { "name": "two ducts remain, no fitting", "where": {}, "count": 2 },
+    { "name": "reference duct untouched", "where": { "type": "INSERT", "block": "REC_600x300", "pos": [0, 0, 0], "dyn": { "Distance3": 2000 } }, "count": 1 },
+    { "name": "second duct moved by -600 across, size kept", "where": { "type": "INSERT", "block": "REC_600x300", "pos": [500, 600, 0], "rot": 0, "dyn": { "Distance3": 2000 } }, "count": 1 }
+  ]
+}

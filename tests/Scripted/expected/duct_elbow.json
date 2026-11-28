@@ -1,0 +1,96 @@
+{
+ "scenario": "duct_elbow",
+ "about": "HVACDUCT (AGENTS.md, fitting dimensions): a run (0,0) - (3000,0) - (3000,2000) of the dialog default size REC_600x300 on its system layer. The rectangular elbow has centreline R = 0.75 W = 450, so the takeup per leg is R tan(45 deg) = 450: Distance3 of the legs is 3000-450 and 2000-450. The elbow is a closed polyline tagged HVACAI_FITTING ELBOW 600x300 (outer arc R 1.25 W, inner R 0.25 W; a 90 degree arc has bulge tan(22.5 deg) = 0.41).",
+ "checks": [
+  {
+   "name": "four entities (two ducts, the elbow, the frame line)",
+   "where": {},
+   "count": 4
+  },
+  {
+   "name": "first leg: Distance3 = 3000 - 450",
+   "where": {
+    "type": "INSERT",
+    "block": "REC_600x300",
+    "layer": "EIA_1 SUPPLY AIR",
+    "pos": [
+     0,
+     0,
+     0
+    ],
+    "rot": 0,
+    "dyn": {
+     "Distance3": 2550
+    }
+   },
+   "count": 1
+  },
+  {
+   "name": "second leg starts after the elbow, rotated 90, Distance3 = 2000 - 450",
+   "where": {
+    "type": "INSERT",
+    "block": "REC_600x300",
+    "layer": "EIA_1 SUPPLY AIR",
+    "pos": [
+     3000,
+     450,
+     0
+    ],
+    "rot": 90,
+    "dyn": {
+     "Distance3": 1550
+    }
+   },
+   "count": 1
+  },
+  {
+   "name": "elbow outline, tagged as a fitting",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_1 SUPPLY AIR",
+    "closed": true,
+    "vertices": [
+     [
+      2550,
+      -300,
+      0.41
+     ],
+     [
+      3300,
+      450,
+      0
+     ],
+     [
+      2700,
+      450,
+      -0.41
+     ],
+     [
+      2550,
+      300,
+      0
+     ]
+    ],
+    "xdata": {
+     "HVACAI_FITTING": [
+      "ELBOW",
+      "600x300"
+     ]
+    }
+   },
+   "count": 1
+  },
+  {
+   "name": "exactly one fitting",
+   "where": {
+    "xdata": {
+     "HVACAI_FITTING": [
+      "ELBOW",
+      "600x300"
+     ]
+    }
+   },
+   "count": 1
+  }
+ ]
+}

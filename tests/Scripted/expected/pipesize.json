@@ -1,0 +1,12 @@
+{
+  "scenario": "pipesize",
+  "about": "HVACPIPESIZE (AGENTS.md): the pick is on the left arm of a T run. The run ends at the T node (degree 3) and at the free end, so only the left arm (0,0)-(2000,0) moves to the dialog default layer (CHWS DN100, the PipeSizeSettings default); the source line is cut at the T and every other piece keeps its layer.",
+  "checks": [
+    { "name": "four lines remain", "where": {}, "count": 4 },
+    { "name": "run piece on EIA_1 CHWS DN100", "where": { "type": "LINE", "layer": "EIA_1 CHWS DN100", "line": [0, 0, 2000, 0] }, "count": 1 },
+    { "name": "only the run is on the size layer", "where": { "layer": "EIA_1 CHWS DN100" }, "count": 1 },
+    { "name": "rest of the cut line stays on ROUGH", "where": { "type": "LINE", "layer": "ROUGH", "line": [2000, 0, 4000, 0] }, "count": 1 },
+    { "name": "other arm of the T stays", "where": { "type": "LINE", "layer": "ROUGH", "line": [2000, -1500, 2000, 0] }, "count": 1 },
+    { "name": "far leg stays", "where": { "type": "LINE", "layer": "ROUGH", "line": [4000, 0, 4000, 3000] }, "count": 1 }
+  ]
+}

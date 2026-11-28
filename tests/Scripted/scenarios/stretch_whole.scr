@@ -1,0 +1,9 @@
+; HVACSTRETCH, a crossing that contains a duct block and a line completely: both move whole.
+HVACSTRETCH
+C
+-500,-1000
+1500,1000
+
+0,0
+;;DEFER
+800,500

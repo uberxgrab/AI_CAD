@@ -1,0 +1,4 @@
+; HVACPIPESIZE, pick the left arm of the T run; the dialog is accepted with its defaults (CHWS DN100); Enter ends the command.
+HVACPIPESIZE
+1000,0
+

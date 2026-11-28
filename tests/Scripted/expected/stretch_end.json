@@ -1,0 +1,11 @@
+{
+  "scenario": "stretch_end",
+  "about": "HVACSTRETCH, one crossing over the end of a LINE and the end of a REC_600x300 duct block, moved +1000 in X (CLAUDE.md, HVACSTRETCH design): the line is stretched, the duct's Distance3 grows by 1000 and its other end (its position) stays.",
+  "checks": [
+    { "name": "two entities remain", "where": {}, "count": 2 },
+    { "name": "line end stretched to x=6000", "where": { "type": "LINE", "layer": "0", "line": [0, 0, 6000, 0] }, "count": 1 },
+    { "name": "no line ends at x=5000 any more", "where": { "type": "LINE", "line": [0, 0, 5000, 0] }, "count": 0 },
+    { "name": "duct Distance3 3000 -> 4000", "where": { "type": "INSERT", "block": "REC_600x300", "dyn": { "Distance3": 4000 } }, "count": 1 },
+    { "name": "duct start fixed", "where": { "type": "INSERT", "block": "REC_600x300", "pos": [0, 2000, 0], "rot": 0 }, "count": 1 }
+  ]
+}

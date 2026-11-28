@@ -1,0 +1,8 @@
+{
+  "scenario": "align_merge",
+  "about": "HVACDUCTALIGN (AGENTS.md, Join): the second duct is aligned 100 mm down onto the first one's edge; the two ducts of one size are then coaxial with facing ends and are merged without asking: the first duct's Distance3 is stretched to the far end of the second (0..5000), the second is erased.",
+  "checks": [
+    { "name": "one duct remains", "where": {}, "count": 1 },
+    { "name": "merged duct covers 0..5000", "where": { "type": "INSERT", "block": "REC_600x300", "layer": "EIA_1 SUPPLY AIR", "pos": [0, 0, 0], "rot": 0, "dyn": { "Distance3": 5000 } }, "count": 1 }
+  ]
+}

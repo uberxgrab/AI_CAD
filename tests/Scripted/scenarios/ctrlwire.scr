@@ -1,0 +1,7 @@
+; HVACCTRLWIRE, select the three cassettes, pick the template route (to the last cassette), Enter takes the circled thermostat end, Enter accepts the preview (Yes).
+HVACCTRLWIRE
+ALL
+
+750,-3000
+
+

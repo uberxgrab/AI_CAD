@@ -1,0 +1,103 @@
+{
+ "scenario": "powerwire",
+ "about": "HVACPOWERWIRE (CLAUDE.md, AGENTS.md): a rough trunk with two side branches and a unit at the trunk end, supply end picked at (0,0). Spec-derived: ONE polyline on EIA_5 SUPPLY WIRE replaces the tree; each branch junction becomes a hook in series order (drop to the unit, 45 degree slant of 300 mm, rise back to the trunk); the wire is orthogonal except for the slants; the cable text '2x1.5 MM2' (height 275) is written beside each rise leg (tagged HVACAI_POWERWIRE CABLETEXT). The source lines are replaced. [run-derived]: the exact vertex list (hooks at the cleaned branch positions x=3010 and 5990, rise legs at 3310 and 6290) and the text positions.",
+ "checks": [
+  {
+   "name": "no source line is left",
+   "where": {
+    "type": "LINE"
+   },
+   "count": 0
+  },
+  {
+   "name": "one wire polyline on the supply wire layer",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_5 SUPPLY WIRE"
+   },
+   "count": 1
+  },
+  {
+   "name": "[run-derived] the wire: two hooks and the trunk end",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_5 SUPPLY WIRE",
+    "closed": false,
+    "vertices": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      3010,
+      0,
+      0
+     ],
+     [
+      3010,
+      -2600,
+      0
+     ],
+     [
+      3310,
+      -2300,
+      0
+     ],
+     [
+      3310,
+      0,
+      0
+     ],
+     [
+      5990,
+      0,
+      0
+     ],
+     [
+      5990,
+      -2600,
+      0
+     ],
+     [
+      6290,
+      -2300,
+      0
+     ],
+     [
+      6290,
+      0,
+      0
+     ],
+     [
+      9000,
+      0,
+      0
+     ]
+    ]
+   },
+   "count": 1
+  },
+  {
+   "name": "hooks are 45 degree slants of 300 mm, the rest axis-parallel",
+   "orthogonal": {
+    "type": "LWPOLYLINE"
+   },
+   "allow_45": true
+  },
+  {
+   "name": "three cable texts, height 275",
+   "where": {
+    "type": "TEXT",
+    "text": "2x1.5 MM2",
+    "height": 275,
+    "xdata": {
+     "HVACAI_POWERWIRE": [
+      "CABLETEXT"
+     ]
+    }
+   },
+   "count": 3
+  }
+ ]
+}

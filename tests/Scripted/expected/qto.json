@@ -1,0 +1,141 @@
+{
+ "scenario": "qto",
+ "about": "HVACQTO (CLAUDE.md, HVACQTO classification): the drawing is not changed. The workbook (dumped as qto.<cad>.xml): equipment named by the FCU-CAS-n kW wording, duct area per sheet band from 2*(W+H)*L (400x300: 1.5 m -> 2.1 m2 in the 0.58 mm band; 600x300: 2+3 = 5 m -> 9 m2 in the 0.75 mm band), copper by the RP layer pair (12.7-6.4: 5 m of D6.4 and 5 m of D12.7), uPVC by the condensate layer (D27, 4 m), steel by the CHWS layer (DN100, 10 m). The bands and the exact row wording are what the HVACQTO core tests pin down; the quantities are derived from the drawn lengths.",
+ "checks": [
+  {
+   "name": "drawing unchanged: nine entities",
+   "where": {},
+   "count": 9
+  }
+ ],
+ "xml_checks": [
+  {
+   "name": "contingency factor cell F6 is 1",
+   "sheet": "DIEU HOA THONG GIO",
+   "row": [
+    null,
+    null,
+    null,
+    "Hệ số dự phòng:",
+    null,
+    1
+   ]
+  },
+  {
+   "name": "2 cassettes 2.8 kW",
+   "sheet": "DIEU HOA THONG GIO",
+   "row": [
+    null,
+    "Dàn lạnh VRV Cassette âm trần Inverter 2.8 kW",
+    null,
+    null,
+    "bộ",
+    2
+   ]
+  },
+  {
+   "name": "1 cassette 5.6 kW",
+   "sheet": "DIEU HOA THONG GIO",
+   "row": [
+    null,
+    "Dàn lạnh VRV Cassette âm trần Inverter 5.6 kW",
+    null,
+    null,
+    "bộ",
+    1
+   ]
+  },
+  {
+   "name": "duct 0.58 mm band: 2.1 m2",
+   "sheet": "DIEU HOA THONG GIO",
+   "row": [
+    null,
+    "Ống gió tôn mạ kẽm 0.58mm",
+    null,
+    null,
+    "m2",
+    2.1
+   ]
+  },
+  {
+   "name": "duct 0.75 mm band: 9 m2",
+   "sheet": "DIEU HOA THONG GIO",
+   "row": [
+    null,
+    "Ống gió tôn mạ kẽm 0.75mm",
+    null,
+    null,
+    "m2",
+    9
+   ]
+  },
+  {
+   "name": "copper D6.4: 5 m",
+   "sheet": "DIEU HOA THONG GIO",
+   "row": [
+    null,
+    "re:^Ống đồng D6[.]4 ",
+    null,
+    null,
+    "m",
+    5
+   ]
+  },
+  {
+   "name": "copper D12.7: 5 m",
+   "sheet": "DIEU HOA THONG GIO",
+   "row": [
+    null,
+    "re:^Ống đồng D12[.]7 ",
+    null,
+    null,
+    "m",
+    5
+   ]
+  },
+  {
+   "name": "uPVC D27: 4 m",
+   "sheet": "DIEU HOA THONG GIO",
+   "row": [
+    null,
+    "re:^Ống thoát nước ngưng uPVC .*D27",
+    null,
+    null,
+    "m",
+    4
+   ]
+  },
+  {
+   "name": "steel DN100: 10 m",
+   "sheet": "DIEU HOA THONG GIO",
+   "row": [
+    null,
+    "re:^Ống thép hàn mạ kẽm DN100",
+    null,
+    null,
+    "m",
+    10
+   ]
+  },
+  {
+   "name": "duct appendix 400x300: 1 duct, 1.5 m, 2.1 m2",
+   "sheet": "PHU LUC ONG GIO",
+   "row": [
+    "400 x 300 mm",
+    1,
+    1.5,
+    2.1
+   ]
+  },
+  {
+   "name": "duct appendix 600x300: 2 ducts, 5 m, 9 m2",
+   "sheet": "PHU LUC ONG GIO",
+   "row": [
+    "600 x 300 mm",
+    2,
+    5,
+    9
+   ]
+  }
+ ]
+}

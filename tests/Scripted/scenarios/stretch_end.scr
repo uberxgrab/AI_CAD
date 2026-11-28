@@ -1,0 +1,10 @@
+; HVACSTRETCH, one crossing over the end of a LINE and the end of a duct block.
+; The second point goes after the DEFER marker: native STRETCH (queued by the command) only starts after the script part before it.
+HVACSTRETCH
+C
+2500,-500
+5500,2500
+
+3000,2000
+;;DEFER
+4000,2000

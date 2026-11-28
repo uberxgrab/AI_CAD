@@ -1,0 +1,5 @@
+; HVACREFRIG, select everything (LINEs and polylines only), pick the outdoor-unit end; dialog and sizing dialog are accepted with defaults.
+HVACREFRIG
+ALL
+
+0,0

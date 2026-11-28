@@ -1,0 +1,127 @@
+{
+ "scenario": "ctrlwire",
+ "about": "HVACCTRLWIRE (CLAUDE.md, AGENTS.md): three cassettes, a template route from the thermostat (0,-3000) to the last cassette (terminal (7500,-300)). Spec-derived: every other selected unit gets its own polyline on EIA_5 CONTROL WIRE, parallel to the template at k x 150 mm, the wire that leaves first is outermost (so none cross), each starting at its own offset position at the thermostat end and leaving perpendicular at the route point nearest the unit's terminal point (the template unit's terminal carried onto units of the same block); cable text '2x0.75 MM2' height 275 beside each exit leg. The template and the blocks are not modified. [run-derived]: the exact side (left) and vertex lists.",
+ "checks": [
+  {
+   "name": "template route untouched",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "ROUGH",
+    "vertices": [
+     [
+      0,
+      -3000,
+      0
+     ],
+     [
+      7500,
+      -3000,
+      0
+     ],
+     [
+      7500,
+      -300,
+      0
+     ]
+    ]
+   },
+   "count": 1
+  },
+  {
+   "name": "three cassettes untouched",
+   "where": {
+    "type": "INSERT",
+    "block": "FCU-CAS-2.8 kW"
+   },
+   "count": 3
+  },
+  {
+   "name": "two control wires on the template layer",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_5 CONTROL WIRE"
+   },
+   "count": 2
+  },
+  {
+   "name": "[run-derived] wire to the first cassette: 300 off the route (leaves first, outermost)",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_5 CONTROL WIRE",
+    "vertices": [
+     [
+      0,
+      -2700,
+      0
+     ],
+     [
+      1500,
+      -2700,
+      0
+     ],
+     [
+      1500,
+      -300,
+      0
+     ]
+    ],
+    "xdata": {
+     "HVACAI_CTRLWIRE": [
+      "WIRE",
+      "W1",
+      "<handle>"
+     ]
+    }
+   },
+   "count": 1
+  },
+  {
+   "name": "[run-derived] wire to the second cassette: 150 off the route",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_5 CONTROL WIRE",
+    "vertices": [
+     [
+      0,
+      -2850,
+      0
+     ],
+     [
+      4500,
+      -2850,
+      0
+     ],
+     [
+      4500,
+      -300,
+      0
+     ]
+    ],
+    "xdata": {
+     "HVACAI_CTRLWIRE": [
+      "WIRE",
+      "W2",
+      "<handle>"
+     ]
+    }
+   },
+   "count": 1
+  },
+  {
+   "name": "wires are orthogonal",
+   "orthogonal": {
+    "layer": "EIA_5 CONTROL WIRE"
+   }
+  },
+  {
+   "name": "two cable texts, height 275",
+   "where": {
+    "type": "TEXT",
+    "text": "2x0.75 MM2",
+    "height": 275,
+    "layer": "EIA_5 CONTROL WIRE"
+   },
+   "count": 2
+  }
+ ]
+}

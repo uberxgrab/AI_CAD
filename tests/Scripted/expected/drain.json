@@ -1,0 +1,174 @@
+{
+ "scenario": "drain",
+ "about": "HVACDRAIN (AGENTS.md, CLAUDE.md): the same rough tree as a condensate network, the drain point at its left end (0,0), three units (2.8, 5.6, 7.1 kW). Spec-derived: pipes are rewritten on the template layers EIA_1 Pipe condensated DN<n>; each unit's own pipe is D27 (Daikin Si39: D27 for one unit); the pipes toward the drain are D34 or larger and never smaller than the pipes upstream; every 90 degree corner and right-angle T joint is cut with a 45 degree piece of 300 mm (212.13 on each axis) and the branch lands DOWNSTREAM of the T (nearer the drain: x 2797.87 < 3000); labels read D<size>-<slope>% (default slope 1%), height 150, tagged HVACAI_DRAINLABEL; unit pipes carry HVACAI_UNIT xdata (index, kW). [run-derived]: the D34 on both downstream pipes (the total kW table of Si39 is in DrainSizingCore; 8.4 and 15.5 kW both give D34) and the exact slant coordinates.",
+ "checks": [
+  {
+   "name": "no source line is left",
+   "where": {
+    "type": "LINE"
+   },
+   "count": 0
+  },
+  {
+   "name": "five pipe polylines",
+   "where": {
+    "type": "LWPOLYLINE"
+   },
+   "count": 5
+  },
+  {
+   "name": "unit 2.8 kW: own pipe D27",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_1 Pipe condensated DN27",
+    "xdata": {
+     "HVACAI_UNIT": [
+      "UNIT",
+      25,
+      2.8
+     ]
+    }
+   },
+   "count": 1
+  },
+  {
+   "name": "unit 5.6 kW: own pipe D27",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_1 Pipe condensated DN27",
+    "xdata": {
+     "HVACAI_UNIT": [
+      "UNIT",
+      50,
+      5.6
+     ]
+    }
+   },
+   "count": 1
+  },
+  {
+   "name": "unit 7.1 kW: own pipe D27",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_1 Pipe condensated DN27",
+    "xdata": {
+     "HVACAI_UNIT": [
+      "UNIT",
+      63,
+      7.1
+     ]
+    }
+   },
+   "count": 1
+  },
+  {
+   "name": "[run-derived] two pipes toward the drain are D34",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "EIA_1 Pipe condensated DN34"
+   },
+   "count": 2
+  },
+  {
+   "name": "all pipes on condensate size layers",
+   "where": {
+    "type": "LWPOLYLINE",
+    "layer": "re:^EIA_1 Pipe condensated DN(27|34|48|60|90|110)$"
+   },
+   "count": 5
+  },
+  {
+   "name": "slanted branch of unit 1 lands downstream of the T (45 degree, 300 mm)",
+   "where": {
+    "type": "LWPOLYLINE",
+    "vertices": [
+     [
+      3010,
+      -2600,
+      0
+     ],
+     [
+      3010,
+      -212.13,
+      0
+     ],
+     [
+      2797.87,
+      0,
+      0
+     ]
+    ]
+   },
+   "count": 1
+  },
+  {
+   "name": "slanted branch of unit 2 lands downstream of the T",
+   "where": {
+    "type": "LWPOLYLINE",
+    "vertices": [
+     [
+      5990,
+      -2600,
+      0
+     ],
+     [
+      5990,
+      -212.13,
+      0
+     ],
+     [
+      5777.87,
+      0,
+      0
+     ]
+    ]
+   },
+   "count": 1
+  },
+  {
+   "name": "every segment is axis-parallel or at 45 degrees",
+   "orthogonal": {
+    "type": "LWPOLYLINE"
+   },
+   "allow_45": true
+  },
+  {
+   "name": "five labels D<size>-1%",
+   "where": {
+    "type": "TEXT",
+    "text": "re:^D(27|34|48|60|90|110)-1%$",
+    "height": 150,
+    "xdata": {
+     "HVACAI_DRAINLABEL": [
+      "SIZE"
+     ]
+    }
+   },
+   "count": 5
+  },
+  {
+   "name": "three D27 labels, two D34 labels",
+   "where": {
+    "type": "TEXT",
+    "text": "D27-1%"
+   },
+   "count": 3
+  },
+  {
+   "name": "two D34 labels",
+   "where": {
+    "type": "TEXT",
+    "text": "D34-1%"
+   },
+   "count": 2
+  },
+  {
+   "name": "unit blocks untouched",
+   "where": {
+    "type": "INSERT",
+    "block": "re:^FCU-CAS-"
+   },
+   "count": 3
+  }
+ ]
+}

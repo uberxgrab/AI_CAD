@@ -1,0 +1,228 @@
+{
+  "scenario": "refrig",
+  "about": "HVACREFRIG (AGENTS.md, CLAUDE.md): a rough tree (a few mm off the axes) with three indoor units whose kW is in the block name: FCU-CAS-2.8 kW (Daikin index 25), 5.6 kW (50), 7.1 kW (63). Spec-derived: two T joints give two 'Branch Connection (1)' refnets; every pipe is orthogonal; sizes by the Daikin VRV IV tables (VrvTables): unit connection 15-50 = 12.7/6.4 and 63-140 = 15.9/9.5, between refnets by the total index downstream (113 < 150 = 15.9/9.5); each size is written on the template layer EIA_1 RP ... with a %%C<gas>/<liquid> label (height 150) and the unit's capacity as HVACAI_UNIT xdata. Checks marked [run-derived] could only be taken from a run and were then compared with the tables: the main pipe (total index 138 -> smallest HP covering it is 6, MainByHp(6) = 19.1/9.5, flagged unconfirmed in the code) and the refnet / label positions.",
+  "checks": [
+    {
+      "name": "two refnets",
+      "where": {
+        "type": "INSERT",
+        "block": "Branch Connection (1)"
+      },
+      "count": 2
+    },
+    {
+      "name": "the three unit blocks are untouched",
+      "where": {
+        "type": "INSERT",
+        "block": "re:^FCU-CAS-"
+      },
+      "count": 3
+    },
+    {
+      "name": "no source line is left",
+      "where": {
+        "type": "LINE"
+      },
+      "count": 0
+    },
+    {
+      "name": "unit 2.8 kW: pipe on 12.7-6.4, ends in the block, index 25",
+      "where": {
+        "type": "LWPOLYLINE",
+        "layer": "EIA_1 RP 12.7-6.4",
+        "xdata": {
+          "HVACAI_UNIT": [
+            "UNIT",
+            25,
+            2.8
+          ]
+        }
+      },
+      "count": 1
+    },
+    {
+      "name": "unit 5.6 kW: pipe on 12.7-6.4, index 50",
+      "where": {
+        "type": "LWPOLYLINE",
+        "layer": "EIA_1 RP 12.7-6.4",
+        "xdata": {
+          "HVACAI_UNIT": [
+            "UNIT",
+            50,
+            5.6
+          ]
+        }
+      },
+      "count": 1
+    },
+    {
+      "name": "unit 7.1 kW: pipe on 15.9-9.5, index 63",
+      "where": {
+        "type": "LWPOLYLINE",
+        "layer": "EIA_1 RP 15.9-9.5 (14)",
+        "xdata": {
+          "HVACAI_UNIT": [
+            "UNIT",
+            63,
+            7.1
+          ]
+        }
+      },
+      "count": 1
+    },
+    {
+      "name": "pipe between the refnets (113 index) on 15.9-9.5",
+      "where": {
+        "type": "LWPOLYLINE",
+        "layer": "EIA_1 RP 15.9-9.5 (14)",
+        "xdata": null
+      },
+      "min": 1
+    },
+    {
+      "name": "[run-derived] main pipe from the outdoor unit on 19.1-9.5",
+      "where": {
+        "type": "LWPOLYLINE",
+        "layer": "EIA_1 RP 19.1-9.5 (22.4)",
+        "vertices": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1580,
+            0,
+            0
+          ]
+        ]
+      },
+      "count": 1
+    },
+    {
+      "name": "five pipe polylines in all",
+      "where": {
+        "type": "LWPOLYLINE"
+      },
+      "count": 5
+    },
+    {
+      "name": "[run-derived] path of unit branch 1",
+      "where": {
+        "type": "LWPOLYLINE",
+        "vertices": [
+          [
+            2510,
+            -248,
+            0
+          ],
+          [
+            3010,
+            -248,
+            0
+          ],
+          [
+            3010,
+            -2600,
+            0
+          ]
+        ]
+      },
+      "count": 1
+    },
+    {
+      "name": "[run-derived] path of unit branch 2",
+      "where": {
+        "type": "LWPOLYLINE",
+        "vertices": [
+          [
+            5490,
+            -248,
+            0
+          ],
+          [
+            5990,
+            -248,
+            0
+          ],
+          [
+            5990,
+            -2600,
+            0
+          ]
+        ]
+      },
+      "count": 1
+    },
+    {
+      "name": "five size labels, height 150, on the annotation layer",
+      "where": {
+        "type": "TEXT",
+        "layer": "EIA_1 GAS ANNOTATIONS",
+        "height": 150,
+        "xdata": {
+          "HVACAI_RPLABEL": [
+            "SIZE"
+          ]
+        }
+      },
+      "count": 5
+    },
+    {
+      "name": "label of the main pipe",
+      "where": {
+        "type": "TEXT",
+        "text": "%%C19.1/9.5"
+      },
+      "count": 1
+    },
+    {
+      "name": "labels of the two 12.7/6.4 branches",
+      "where": {
+        "type": "TEXT",
+        "text": "%%C12.7/6.4"
+      },
+      "count": 2
+    },
+    {
+      "name": "labels of the two 15.9/9.5 pipes",
+      "where": {
+        "type": "TEXT",
+        "text": "%%C15.9/9.5"
+      },
+      "count": 2
+    },
+    {
+      "name": "[run-derived] refnet positions on the trunk",
+      "where": {
+        "type": "INSERT",
+        "block": "Branch Connection (1)",
+        "pos": [
+          1580,
+          0,
+          0
+        ]
+      },
+      "count": 1
+    },
+    {
+      "name": "[run-derived] second refnet position",
+      "where": {
+        "type": "INSERT",
+        "block": "Branch Connection (1)",
+        "pos": [
+          4560,
+          0,
+          0
+        ]
+      },
+      "count": 1
+    },
+    {
+      "name": "every pipe segment is parallel to an axis",
+      "orthogonal": {
+        "type": "LWPOLYLINE"
+      }
+    }
+  ]
+}

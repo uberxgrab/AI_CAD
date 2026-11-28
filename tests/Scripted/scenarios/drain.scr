@@ -1,0 +1,5 @@
+; HVACDRAIN, select everything, pick the drain end; dialogs accepted with defaults.
+HVACDRAIN
+ALL
+
+0,0

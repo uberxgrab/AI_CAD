@@ -1,0 +1,10 @@
+{
+  "scenario": "stretch_two",
+  "about": "HVACSTRETCH, two crossings in one selection (the ends of the first and the third line): both are stretched by +500, the middle line is not selected and stays.",
+  "checks": [
+    { "name": "three entities remain", "where": {}, "count": 3 },
+    { "name": "first line stretched", "where": { "type": "LINE", "line": [0, 0, 5500, 0] }, "count": 1 },
+    { "name": "third line stretched", "where": { "type": "LINE", "line": [0, 6000, 5500, 6000] }, "count": 1 },
+    { "name": "middle line unchanged", "where": { "type": "LINE", "line": [0, 3000, 5000, 3000] }, "count": 1 }
+  ]
+}

@@ -1,0 +1,50 @@
+[
+ {
+  "scenario": "stretch_end",
+  "cad": "zwcad",
+  "match": ".",
+  "reason": "ZWCAD drops the first line break of a string given to SendStringToExecute while a command runs (from a script): HVACSTRETCH's '_.STRETCH' + selection arrives glued as the unknown command '_.STRETCH_C', so native STRETCH never starts. With a line break prefixed (throw-away edit) the line stretched, but the duct got Distance3 19.23 instead of 4000 because PointMonitor reports the real mouse position, not the typed second point. Interactive behaviour unverified; see CLAUDE.md, Scripted end-to-end tests."
+ },
+ {
+  "scenario": "stretch_whole",
+  "cad": "zwcad",
+  "match": ".",
+  "reason": "Same cause as stretch_end: native STRETCH never starts under a ZWCAD script, so nothing is moved."
+ },
+ {
+  "scenario": "stretch_remove",
+  "cad": "zwcad",
+  "match": ".",
+  "reason": "Same cause as stretch_end: native STRETCH never starts under a ZWCAD script, so nothing is stretched."
+ },
+ {
+  "scenario": "stretch_two",
+  "cad": "zwcad",
+  "match": ".",
+  "reason": "Same cause as stretch_end; the crossing option letter that arrives at the command prompt runs the CIRCLE command, which leaves two stray circles (5 entities instead of 3)."
+ },
+ {
+  "scenario": "stretch_end",
+  "cad": "cross",
+  "match": ".",
+  "reason": "The ZWCAD dump differs from the AutoCAD dump for the same reason as the zwcad entry of this scenario: ZWCAD drops the first line break of a string given to SendStringToExecute while a command runs (from a script)"
+ },
+ {
+  "scenario": "stretch_whole",
+  "cad": "cross",
+  "match": ".",
+  "reason": "The ZWCAD dump differs from the AutoCAD dump for the same reason as the zwcad entry of this scenario: Same cause as stretch_end"
+ },
+ {
+  "scenario": "stretch_remove",
+  "cad": "cross",
+  "match": ".",
+  "reason": "The ZWCAD dump differs from the AutoCAD dump for the same reason as the zwcad entry of this scenario: Same cause as stretch_end"
+ },
+ {
+  "scenario": "stretch_two",
+  "cad": "cross",
+  "match": ".",
+  "reason": "The ZWCAD dump differs from the AutoCAD dump for the same reason as the zwcad entry of this scenario: Same cause as stretch_end; the crossing option letter that arrives at the command prompt runs the CIRCLE command, which leaves two stray circles (5 entities instead of 3)."
+ }
+]

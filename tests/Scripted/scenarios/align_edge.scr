@@ -1,0 +1,5 @@
+; HVACDUCTALIGN, reference = upper edge of the first duct, aligned = lower edge of the second duct; Enter ends.
+HVACDUCTALIGN
+1000,300
+1500,900
+

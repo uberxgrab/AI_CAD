@@ -1,0 +1,5 @@
+; HVACDUCTALIGN, reference = upper edge of the first duct, aligned = upper edge of the second duct (100 mm higher): the ducts end up coaxial and are merged; Enter ends.
+HVACDUCTALIGN
+1000,300
+4000,400
+

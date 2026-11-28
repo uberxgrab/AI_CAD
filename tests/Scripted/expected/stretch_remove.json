@@ -1,0 +1,9 @@
+{
+  "scenario": "stretch_remove",
+  "about": "HVACSTRETCH, crossing over both line ends, then R and a pick remove the upper line from the selection: only the lower line is stretched (+1000), the removed one stays as drawn.",
+  "checks": [
+    { "name": "two entities remain", "where": {}, "count": 2 },
+    { "name": "lower line stretched", "where": { "type": "LINE", "line": [0, 0, 6000, 0] }, "count": 1 },
+    { "name": "removed line unchanged", "where": { "type": "LINE", "line": [0, 1000, 5000, 1000] }, "count": 1 }
+  ]
+}
