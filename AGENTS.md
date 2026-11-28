@@ -1117,6 +1117,19 @@ powershell -File tests\run-core-tests.ps1                                # every
 powershell -File cad_addin\register-zwcad.ps1 [-Unregister]               # per-user autoload (HKCU)
 ```
 
+Scripted end-to-end tests of the commands (`tests\Scripted`, see `CLAUDE.md`, "Scripted end-to-end tests"):
+`HVACAI_TEST=1` puts the add-in in test mode (dialogs accepted with their defaults through
+`DialogHost.ShowModal`, nothing remembered), `.scr` scripts feed the prompts of 13 scenario drawings,
+`HVACTESTDUMP` writes the drawing as JSON and `compare.py` checks it against `expected\*.json`:
+
+```powershell
+powershell -File tests\Zw\run-zw-tests.ps1 -Suite scripted [-Scenario a,b]   # ZWCAD
+powershell -File tests\Scripted\run-acad-scripted.ps1 [-Scenario a,b]        # AutoCAD 2023, accoreconsole
+```
+
+A new dialog must be shown with `DialogHost.ShowModal(form)` and a new settings store must return
+defaults and skip saving under `TestMode.Enabled`, or scripted tests will block or touch the user's settings.
+
 Never close or send input to a ZWCAD, `acad.exe` or Excel process you did not start; the
 ZWCAD runner stops only the process id it launched. New source files in `cad_addin\src` are
 picked up by the Zw project automatically; a new test file or linked source needs adding to

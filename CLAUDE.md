@@ -62,6 +62,13 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
     SAME test files and `cad_addin\src` files as the accoreconsole projects above (same item
     lists; keep them in step) through the namespace mapping, so no test code is forked.
     `tests/run-core-tests.ps1` runs every AutoCAD-free C# core test project and summarises.
+  - `tests/Scripted/`: scripted end-to-end tests of the interactive COMMANDS (see "Scripted
+    end-to-end tests"). `ScriptedTests/` is the test DLL (scenario builder, JSON dump, test
+    commands; its ZWCAD twin is `tests/Zw/ZwScriptedTests/`, same file list), `scenarios/<name>.scr`
+    the prompt input of each scenario, `expected/<name>.json` the reviewed assertions,
+    `compare.py` the comparer, `known-failures.json` the failures that are understood,
+    `run-acad-scripted.ps1` the AutoCAD runner (accoreconsole); the ZWCAD runner is
+    `tests/Zw/run-zw-tests.ps1 -Suite scripted`.
   - `mcp_server.py` + `aitools/`: AI plan Phase 1, an MCP server (mcp 2.x:
     `MCPServer` from `mcp.server.mcpserver`, not v1 `FastMCP`; stdio, never print to
     stdout) with tools `list_drawings`, `convert_dwg` (accoreconsole on a copy,
@@ -214,7 +221,7 @@ parser.load_dxf -> extract_entities      RawEntity
 | Rooms → units → rough routes | `HVACROOMS` → `HVACLOAD` → `HVACPLACEUNITS` → `HVACPLACEODU` → `HVACROUTEDRAFT` → `HVACRISER` → existing `HVACREFRIG`/`HVACDRAIN`/`HVACPOWERWIRE` → `HVACQTO` | Each step is a separate command with preview and one undo group. The user tested the first four in AutoCAD on 2026-11-22 (relatively few bugs, not listed yet). `HVACPLACEODU`, `HVACRISER` and the port/corridor routing were added the same day and are not yet tested interactively. |
 | DXF validation / AI error detection | Rule-based foundation | Deterministic checks only. AI inference, labelled data, and CAD-facing review workflows are planned. |
 | Room extraction (tầng 0) | Prototype + `HVACROOMS` | Geometry only. Real-drawing limits: open-plan spaces merge (use `HVAC-ROOM-SPLIT`), openings wider than 1800 mm or single-line walls leak, the room name is the longest text inside. `DT. x M2` labels in the sample drawing are whole-unit areas, so they only roughly score rooms. |
-| Automated tests | Python, C# cores, headless writers | 69 Python tests (`discover -s tests`, incl. the MCP stdio round trip); C# cores in `tests/HvacQtoCoreTests/`, `PipeCoreTests/`, `DuctCoreTests/`, `RoomsCoreTests/`, `LoadCoreTests/`, `UnitCoreTests/`, `RouteCoreTests/`, `OduRiserCoreTests/`, `NormCoreTests/`. `tests/DuctAcadTests/`, `tests/UnitCoreTests/Acad/`, `tests/OduRiserCoreTests/Acad/` and `tests/NormCoreTests/Acad/` run non-interactive writer code in `accoreconsole`. Jigs, previews, osnap and picking have no automated tests, so commands must still be tested manually in AutoCAD. |
+| Automated tests | Python, C# cores, headless writers | 69 Python tests (`discover -s tests`, incl. the MCP stdio round trip); C# cores in `tests/HvacQtoCoreTests/`, `PipeCoreTests/`, `DuctCoreTests/`, `RoomsCoreTests/`, `LoadCoreTests/`, `UnitCoreTests/`, `RouteCoreTests/`, `OduRiserCoreTests/`, `NormCoreTests/`. `tests/DuctAcadTests/`, `tests/UnitCoreTests/Acad/`, `tests/OduRiserCoreTests/Acad/` and `tests/NormCoreTests/Acad/` run non-interactive writer code in `accoreconsole`. `tests/Scripted/` drives 13 commands from `.scr` scripts in accoreconsole and in ZWCAD (see "Scripted end-to-end tests"). Jigs, previews with a real mouse, osnap and dialogs as a user sees them have no automated tests, so commands must still be tested manually in AutoCAD. |
 
 ## Next steps
 
@@ -348,6 +355,10 @@ dotnet build cad_addin\HvacAiCadAddin.Zw.csproj -p:Configuration=Debug -p:Platfo
 
 # ZWCAD 2026: smoke test and the writer suites, each in its own ZWCAD.exe instance (exit 0 = all pass)
 powershell -File tests\Zw\run-zw-tests.ps1 [-Suite smoke|writers|all] [-ZwDir D:\ZWCAD] [-TimeoutSec 300] [-NoBuild]
+
+# Scripted end-to-end tests of the commands (13 scenarios), on ZWCAD 2026 and on AutoCAD 2023 (accoreconsole)
+powershell -File tests\Zw\run-zw-tests.ps1 -Suite scripted [-Scenario name,name] [-TimeoutSec 60] [-StrictKnown]
+powershell -File tests\Scripted\run-acad-scripted.ps1 [-Scenario name,name] [-TimeoutSec 60] [-ZwDump <zw dump folder>] [-StrictKnown]
 
 # ZWCAD 2026: autoload the add-in for the current user (HKCU only), or remove that again
 powershell -File cad_addin\register-zwcad.ps1 [-Dll <path>] [-Unregister]
@@ -489,9 +500,80 @@ below were checked on 2026-11-28 by `tests\Zw\run-zw-tests.ps1`; "unverified" is
   behaviour (Undo across commands, `LockDocument`, `MdiActiveDocument.Editor`) is not exercised.
 - **Results** (ZWCAD 2026, 2026-11-28): smoke 16/16, duct 516/516, unit 28/28, oduriser 33/33,
   norm 37/37 (`NORMTEST` 22 and `DUCTLINETEST` 15). No assertion was weakened or skipped.
+- **Scripted suite** (`run-zw-tests.ps1 -Suite scripted`, see "Scripted end-to-end tests"): 13 scenarios, 78 checks pass and 9 are KNOWN failures (2026-11-28). Pass on ZWCAD: `duct_elbow`, `align_edge`, `align_merge`, `pipesize`, `refrig`, `drain`, `powerwire`, `ctrlwire`, `qto` (each also with its AutoCAD accoreconsole result: identical expectations, same checks). The four `stretch_*` scenarios fail their stretch checks (the 9 KNOWN): see "ZWCAD difference found". Each scenario instance takes about 10 s; the suite about 3 minutes.
 - **Autoload.** `cad_addin\register-zwcad.ps1` writes `HKCU\Software\ZWSOFT\ZWCAD\2026\en-US\Applications\HvacAiCadAddin`
   (`LOADER`, `LOADCTRLS` 2, `MANAGED` 1). It was written but NOT run during development.
   `start_zw.scr` NETLOADs `bin\Zw\Debug\net48\HvacAiCadAddin.dll` for the Visual Studio start action.
+
+## Scripted end-to-end tests
+
+`tests/Scripted` runs the commands themselves (not only their writers) from `.scr` scripts that feed the
+prompts, on a scenario drawing, and compares the resulting model space with reviewed expectations.
+
+- **Test mode (add-in).** With the environment variable `HVACAI_TEST=1` in the CAD process
+  (`cad_addin/src/TestMode.cs`, `DialogHost.cs`): every modal dialog of the commands (all former
+  `Application.ShowModalDialog(form)` call sites now call `DialogHost.ShowModal(form)`) is built as usual and
+  its accept button (`AcceptButton`, or `Apply`/`OK`) is clicked as soon as it is shown, so the settings come
+  from the dialog's own OK handler with the dialog's DEFAULT values; a dialog whose button stays disabled
+  (`SizingForm` with a missing capacity) or does not close within 6 s is cancelled and logged. In test mode
+  the dialog uses plain WinForms `ShowDialog` (no AcMgd type, so it also works in accoreconsole). Every
+  `*SettingsStore.Load()` returns the defaults (or the file of that name in the folder
+  `HVACAI_TEST_SETTINGS`, e.g. `HVACREFRIG.settings`, to override fields), every `Save()` does nothing, so
+  `%APPDATA%\HvacAiCadAddin` is never touched. `HVACAI_TEST_TEMPLATE` is the template copy
+  (`TemplateLocator`, nothing remembered), `HVACAI_TEST_WORK` the folder where `HVACQTO` writes
+  `HVAC_Quantity_Takeoff.xml` instead of asking for a file name, `HVACAI_TEST_LOG` a log of what test mode
+  did. With `HVACAI_TEST` unset nothing changes.
+- **Scenarios.** `ScriptedTests/Scenarios.cs` builds each drawing from a blank `Database` (rough networks as
+  LINE/LWPOLYLINE, blocks and layers imported from a COPY of the template with `TemplateSource`) and saves
+  it as a DWG in the run's work folder (nothing binary is committed). Commands: `HVACTESTBUILD` (all
+  scenarios), `HVACTESTDUMP` (UTF-8 JSON of model space: type, layer, colour/linetype if not ByLayer, effective
+  block name, position, rotation, scale, dynamic properties, attributes, vertices/bulges, line ends, text and
+  height, xdata app names and the values of `HVACAI_*` apps, rounded to 0.01 mm, sorted, no handles; handles
+  inside xdata become `<handle>`; a `HVACQTO` workbook is copied beside it), `HVACTESTTRACE` (command,
+  prompt and unknown-command transcript into the log: ZWCAD has no console), `HVACTESTINFO`, `HVACTESTSAFE`
+  / `HVACTESTRESTORE`, `HVACTESTDEFER`.
+- **Script rules** (all verified): blank lines are Enter and `;` lines are comments. `_.ZOOM _E` first, or
+  coordinate picks use a pick box sized by the old view. A script's typed coordinates are snapped by the
+  RUNNING object snaps (`OSNAPCOORD` 2 = keyboard wins except in scripts), and `OSMODE` lives in the
+  user's ZWCAD profile: `HVACTESTSAFE` sets it to 0 and `HVACTESTRESTORE` (last command of every script)
+  puts it back; a killed instance leaves `<work>\osmode.orig`, and the ZWCAD runner then starts one more
+  instance to restore it. `(command)` as a script line cancels the running command (Esc inside a script
+  aborts the script itself); this ends `HVACDUCT`'s point loop, but ZWCAD then ends the script too, so that
+  scenario defers its dump and quit with `;;DEFER` (the handler also fires when the command is cancelled). `SendStringToExecute` (used by
+  `HVACSTRETCH` to start native STRETCH) is only processed AFTER the script has ended, so a scenario
+  puts `;;DEFER` after the line that ends the command and writes the rest (the second point) below it:
+  the runner moves those lines, the dump and the quit into a tail file that `HVACTESTDEFER` queues
+  behind the command's own string.
+- **Expectations** (`expected/<name>.json`): `where` is a partial match on a dumped entity (numbers within
+  0.01, lists element by element, `re:` regular expressions) with `count`/`min`/`max`; also `orthogonal`
+  and `xml_checks` (rows of the HVACQTO workbook). They are written from the specs (AGENTS.md, CLAUDE.md,
+  the Daikin tables); checks marked `[run-derived]` could only be taken from a run (then reviewed
+  against the tables). `compare.py` also compares the two CADs' dumps entity by entity (0.01 mm) when both
+  dumps exist (`run-acad-scripted.ps1 -ZwDump <folder>`). `known-failures.json` lists understood failures
+  per scenario and CAD (`match` is a regular expression over the check name); a failing check they cover
+  prints as `KNOWN` with the reason and does not fail the run unless `-StrictKnown`. Nothing is skipped.
+- **AutoCAD runner.** The production add-in DLL runs unchanged in `accoreconsole` (with `/isolate`,
+  `SECURELOAD` 0 around `NETLOAD`) in test mode, all 13 scenarios included (HVACSTRETCH too, through
+  `;;DEFER`: accoreconsole processes the queued string when the script has ended). It does not use the
+  user's `acad.exe`: that starts the user's profile, whose third-party plug-in (Hi-Design) opens a modal
+  registration dialog, and `acad.exe` loads the stale add-in from the `HKCU ... Applications\HvacAiCadAddin`
+  key (a locked, older DLL). Result (2026-11-28): all 13 scenarios pass their expectations in accoreconsole
+  (85 checks). With `-ZwDump <ZWCAD dump folder>` the dumps of the two CADs are identical within 0.01 mm
+  for the 9 non-stretch scenarios (including the `HVACQTO` workbook checks); the four `stretch_*` dumps differ
+  (known, see below). Jigs, `PointMonitor` with a real mouse, and dialogs as a user sees them are still
+  not covered: accoreconsole has no screen, and `HVACSTRETCH`'s dynamic-block part is therefore exercised with
+  a typed second point only.
+- **ZWCAD runner.** One `ZWCAD.exe` builds the scenario drawings, then one instance per scenario opens its
+  DWG (`ZWCAD.exe <dwg> /b run.scr`; no "Missing SHX" dialog for these drawings), with `HVACAI_TEST=1` in its
+  environment.
+- **ZWCAD difference found.** Run from a script, ZWCAD drops the FIRST line break of a string given to
+  `SendStringToExecute` while a command is running (two queued lines arrive glued: the command is
+  `_.STRETCH_C`, an unknown command). So `HVACSTRETCH` never starts native STRETCH under ZWCAD scripts.
+  Confirmed by prefixing a line break in a throw-away edit (STRETCH then started and stretched the line).
+  Whether the same happens interactively is UNVERIFIED, so no shim was added. Even with that, the dynamic
+  block ends up with a wrong `Distance3` (19.23 instead of 4000): `PointMonitor` in the ZWCAD window reports
+  the real mouse position, not the typed second point. The four `stretch_*` scenarios are listed in
+  `known-failures.json` for ZWCAD.
 
 ## Known pitfalls
 
