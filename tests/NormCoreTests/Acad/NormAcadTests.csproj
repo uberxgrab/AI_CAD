@@ -37,6 +37,7 @@
     <Compile Include="..\..\..\cad_addin\src\RoomsCore.cs" Link="RoomsCore.cs" />
     <Compile Include="..\..\..\cad_addin\src\RoomsExchange.cs" Link="RoomsExchange.cs" />
     <Compile Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <Compile Include="..\..\..\cad_addin\src\TestMode.cs" Link="TestMode.cs" />
     <Compile Include="..\..\..\cad_addin\src\HvacQuantityTakeoffCore.cs" Link="HvacQuantityTakeoffCore.cs" />
     <Compile Include="..\..\..\cad_addin\src\DuctGeometryCore.cs" Link="DuctGeometryCore.cs" />
     <Compile Include="..\..\..\cad_addin\src\DuctBlockLibrary.cs" Link="DuctBlockLibrary.cs" />

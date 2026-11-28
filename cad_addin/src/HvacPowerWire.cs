@@ -99,7 +99,7 @@ namespace HvacAiCadAddin.Commands
             PowerWireSettings settings;
             using (PowerWireSettingsForm form = new PowerWireSettingsForm())
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 settings = form.Settings;
             }

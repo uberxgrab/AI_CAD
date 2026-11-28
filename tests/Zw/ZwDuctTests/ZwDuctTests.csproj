@@ -18,6 +18,7 @@
     <ZwMapInput Include="..\..\..\cad_addin\src\DuctAligner.cs" Link="DuctAligner.cs" />
     <ZwMapInput Include="..\..\..\cad_addin\src\DynamicBlockHelpers.cs" Link="DynamicBlockHelpers.cs" />
     <ZwMapInput Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\TestMode.cs" Link="TestMode.cs" />
     <Reference Include="ZwManaged">
       <HintPath>$(ZwDir)\ZwManaged.dll</HintPath>
       <Private>False</Private>

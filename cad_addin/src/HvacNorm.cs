@@ -101,7 +101,7 @@ namespace HvacAiCadAddin.Commands
             string saveName;
             using (NormForm form = new NormForm(layers, first, mapsFolder, addinFolder, last))
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 settings = form.Settings;
                 systems = form.Systems;

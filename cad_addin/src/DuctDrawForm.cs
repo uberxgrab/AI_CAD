@@ -24,6 +24,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static DuctDrawSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACDUCT.settings", DuctDrawSettings.Deserialize, new DuctDrawSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -41,6 +44,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(DuctDrawSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

@@ -120,7 +120,7 @@ namespace HvacAiCadAddin.Commands
                 : "";
             using (LoadSettingsForm form = new LoadSettingsForm(rooms, table, guessed, settings, note))
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                 {
                     editor.WriteMessage("\nNothing was written.");
                     return;

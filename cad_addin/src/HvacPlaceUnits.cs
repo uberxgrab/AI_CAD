@@ -70,7 +70,7 @@ namespace HvacAiCadAddin.Commands
             List<RoomUnitPlan> plans;
             using (UnitPlacementForm form = new UnitPlacementForm(rooms))
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 settings = form.Settings;
                 plans = form.Plans;

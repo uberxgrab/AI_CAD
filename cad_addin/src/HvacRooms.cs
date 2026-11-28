@@ -72,7 +72,7 @@ namespace HvacAiCadAddin.Commands
             string addinFolder = Path.GetDirectoryName(typeof(HvacRoomsCommand).Assembly.Location);
             using (RoomsSettingsForm form = new RoomsSettingsForm(layers, addinFolder))
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 settings = form.Settings;
                 script = form.ResolvedScript;

@@ -97,7 +97,7 @@ namespace HvacAiCadAddin.Commands
                 OduBlockChoice block;
                 using (OduForm form = new OduForm(read.Units, resolve))
                 {
-                    if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                    if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                         return;
                     settings = form.Settings;
                     plan = form.Plan;

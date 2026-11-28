@@ -23,6 +23,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static PowerWireSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACPOWERWIRE.settings", PowerWireSettings.Deserialize, new PowerWireSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -40,6 +43,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(PowerWireSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

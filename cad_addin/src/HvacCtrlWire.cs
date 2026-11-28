@@ -194,7 +194,7 @@ namespace HvacAiCadAddin.Commands
             ControlWireSettings settings;
             using (ControlWireSettingsForm form = new ControlWireSettingsForm())
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 settings = form.Settings;
             }

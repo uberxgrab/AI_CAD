@@ -23,6 +23,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static ControlWireSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACCTRLWIRE.settings", ControlWireSettings.Deserialize, new ControlWireSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -40,6 +43,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(ControlWireSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

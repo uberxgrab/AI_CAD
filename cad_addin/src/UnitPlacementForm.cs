@@ -44,6 +44,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static UnitSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACPLACEUNITS.settings", UnitSettings.Deserialize, new UnitSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -61,6 +64,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(UnitSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

@@ -305,6 +305,10 @@ namespace HvacAiCadAddin.Commands
         // Returns null if the user cancels.
         internal static string GetTemplatePath(Editor editor, bool forcePrompt)
         {
+            // Test mode: the template copy named by the test runner, or the repository one; nothing is remembered.
+            if (TestMode.Enabled && !forcePrompt)
+                return TestMode.TemplatePath ?? FindNearAssembly();
+
             if (!forcePrompt)
             {
                 string remembered = ReadRemembered();

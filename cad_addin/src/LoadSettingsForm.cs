@@ -24,6 +24,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static LoadSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACLOAD.settings", LoadSettings.Deserialize, new LoadSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -41,6 +44,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(LoadSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

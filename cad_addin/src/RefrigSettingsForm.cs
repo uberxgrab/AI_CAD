@@ -24,6 +24,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static RefrigSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACREFRIG.settings", RefrigSettings.Deserialize, new RefrigSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -41,6 +44,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(RefrigSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

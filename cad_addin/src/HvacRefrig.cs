@@ -97,7 +97,7 @@ namespace HvacAiCadAddin.Commands
             RefrigSettings settings;
             using (RefrigSettingsForm form = new RefrigSettingsForm())
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 settings = form.Settings;
             }

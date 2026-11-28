@@ -23,6 +23,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static DrainSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACDRAIN.settings", DrainSettings.Deserialize, new DrainSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -40,6 +43,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(DrainSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

@@ -117,7 +117,7 @@ namespace HvacAiCadAddin.Commands
             }
 
             DuctDrawForm form = new DuctDrawForm(sizes, layers);
-            if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+            if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                 return;
 
             DuctDrawSettings settings = form.Settings;

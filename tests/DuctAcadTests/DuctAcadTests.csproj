@@ -35,6 +35,7 @@
     <Compile Include="..\..\cad_addin\src\DuctAligner.cs" Link="DuctAligner.cs" />
     <Compile Include="..\..\cad_addin\src\DynamicBlockHelpers.cs" Link="DynamicBlockHelpers.cs" />
     <Compile Include="..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <Compile Include="..\..\cad_addin\src\TestMode.cs" Link="TestMode.cs" />
     <Reference Include="AcDbMgd">
       <HintPath>$(AcadDir)\acdbmgd.dll</HintPath>
       <Private>False</Private>

@@ -24,6 +24,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static RouteDraftSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACROUTEDRAFT.settings", RouteDraftSettings.Deserialize, new RouteDraftSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -41,6 +44,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(RouteDraftSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

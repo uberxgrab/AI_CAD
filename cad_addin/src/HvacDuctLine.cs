@@ -122,7 +122,7 @@ namespace HvacAiCadAddin.Commands
             DuctLineOptions options2;
             using (DuctLineForm form = new DuctLineForm(layers, summary))
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 options2 = form.Options;
             }

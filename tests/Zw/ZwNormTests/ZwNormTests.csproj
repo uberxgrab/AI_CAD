@@ -19,6 +19,7 @@
     <ZwMapInput Include="..\..\..\cad_addin\src\RoomsCore.cs" Link="RoomsCore.cs" />
     <ZwMapInput Include="..\..\..\cad_addin\src\RoomsExchange.cs" Link="RoomsExchange.cs" />
     <ZwMapInput Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\TestMode.cs" Link="TestMode.cs" />
     <ZwMapInput Include="..\..\..\cad_addin\src\HvacQuantityTakeoffCore.cs" Link="HvacQuantityTakeoffCore.cs" />
     <ZwMapInput Include="..\..\..\cad_addin\src\DuctGeometryCore.cs" Link="DuctGeometryCore.cs" />
     <ZwMapInput Include="..\..\..\cad_addin\src\DuctBlockLibrary.cs" Link="DuctBlockLibrary.cs" />

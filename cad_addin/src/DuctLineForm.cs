@@ -22,6 +22,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static DuctLineOptions Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACDUCTLINE.settings", DuctLineOptions.Deserialize, new DuctLineOptions());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -39,6 +42,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(DuctLineOptions options)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

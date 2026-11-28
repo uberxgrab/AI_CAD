@@ -23,6 +23,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static NormSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACNORM.settings", NormSettings.Deserialize, new NormSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -40,6 +43,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(NormSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

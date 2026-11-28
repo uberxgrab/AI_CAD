@@ -112,6 +112,9 @@ namespace HvacAiCadAddin.Commands
 
         private static TakeoffOptions LoadLastOptions()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACQTO.settings", TakeoffOptions.Deserialize, TakeoffOptions.CreateDefault());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -128,6 +131,9 @@ namespace HvacAiCadAddin.Commands
 
         private static void SaveOptions(TakeoffOptions options)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

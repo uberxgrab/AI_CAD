@@ -64,7 +64,7 @@ namespace HvacAiCadAddin.Commands
             {
                 using (SizingForm form = new SizingForm(setup))
                 {
-                    if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK || _last == null)
+                    if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK || _last == null)
                         return null;
 
                     SizingRequestView request = form.FinalRequest;

@@ -30,6 +30,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static RiserSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACRISER.settings", RiserSettings.Deserialize, new RiserSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -47,6 +50,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(RiserSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

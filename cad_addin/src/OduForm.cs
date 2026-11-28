@@ -24,6 +24,9 @@ namespace HvacAiCadAddin.Vrv
 
         internal static OduSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACPLACEODU.settings", OduSettings.Deserialize, new OduSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -41,6 +44,9 @@ namespace HvacAiCadAddin.Vrv
 
         internal static void Save(OduSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

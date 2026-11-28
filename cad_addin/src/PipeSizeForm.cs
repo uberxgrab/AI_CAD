@@ -23,6 +23,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static PipeSizeSettings Load()
         {
+            if (TestMode.Enabled)
+                return TestMode.LoadSettings("HVACPIPESIZE.settings", PipeSizeSettings.Deserialize, new PipeSizeSettings());
+
             try
             {
                 if (File.Exists(SettingsPath))
@@ -40,6 +43,9 @@ namespace HvacAiCadAddin.Commands
 
         internal static void Save(PipeSizeSettings settings)
         {
+            if (TestMode.Enabled)
+                return;
+
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));

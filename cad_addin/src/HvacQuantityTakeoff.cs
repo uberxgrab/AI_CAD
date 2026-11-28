@@ -42,21 +42,30 @@ namespace HvacAiCadAddin.Commands
             TakeoffOptions options;
             using (TakeoffSettingsForm form = new TakeoffSettingsForm())
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 options = form.Options;
             }
 
-            PromptSaveFileOptions saveOptions = new PromptSaveFileOptions(
-                "\nSave HVAC quantity workbook")
+            string workbookPath;
+            if (TestMode.Enabled)
             {
-                Filter = "Excel XML Workbook (*.xml)|*.xml",
-                DialogCaption = "Save HVAC quantity takeoff",
-                InitialFileName = "HVAC_Quantity_Takeoff.xml"
-            };
-            PromptFileNameResult file = editor.GetFileNameForSave(saveOptions);
-            if (file.Status != PromptStatus.OK)
-                return;
+                workbookPath = TestMode.OutputPath("HVAC_Quantity_Takeoff.xml");
+            }
+            else
+            {
+                PromptSaveFileOptions saveOptions = new PromptSaveFileOptions(
+                    "\nSave HVAC quantity workbook")
+                {
+                    Filter = "Excel XML Workbook (*.xml)|*.xml",
+                    DialogCaption = "Save HVAC quantity takeoff",
+                    InitialFileName = "HVAC_Quantity_Takeoff.xml"
+                };
+                PromptFileNameResult file = editor.GetFileNameForSave(saveOptions);
+                if (file.Status != PromptStatus.OK)
+                    return;
+                workbookPath = file.StringResult;
+            }
 
             var blocks = new List<TakeoffBlockInput>();
             var curves = new List<TakeoffCurveInput>();
@@ -108,7 +117,7 @@ namespace HvacAiCadAddin.Commands
             TakeoffResult result = TakeoffAggregator.Aggregate(blocks, curves, options);
             try
             {
-                TakeoffWorkbookWriter.Write(file.StringResult, result);
+                TakeoffWorkbookWriter.Write(workbookPath, result);
             }
             catch (System.Exception exception)
             {
@@ -118,7 +127,7 @@ namespace HvacAiCadAddin.Commands
 
             editor.WriteMessage(
                 "\nHVAC takeoff saved: {0}\nEquipment rows: {1}; duct sizes: {2}; copper rows: {3}; uPVC rows: {4}; steel rows: {5}; other pipe rows: {6}",
-                file.StringResult, result.EquipmentRows.Count, result.DuctSizeRows.Count,
+                workbookPath, result.EquipmentRows.Count, result.DuctSizeRows.Count,
                 result.CopperRows.Count, result.UpvcRows.Count, result.SteelRows.Count, result.OtherRows.Count);
             if (result.TaggedCurveCount > 0)
                 editor.WriteMessage("\nCurves sized by HVACNORM tags: {0}", result.TaggedCurveCount);

@@ -32,6 +32,7 @@
     <Compile Include="..\..\..\cad_addin\src\UnitPlacementCore.cs" Link="UnitPlacementCore.cs" />
     <Compile Include="..\..\..\cad_addin\src\UnitPlacementWriter.cs" Link="UnitPlacementWriter.cs" />
     <Compile Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <Compile Include="..\..\..\cad_addin\src\TestMode.cs" Link="TestMode.cs" />
     <Reference Include="AcDbMgd">
       <HintPath>$(AcadDir)\acdbmgd.dll</HintPath>
       <Private>False</Private>

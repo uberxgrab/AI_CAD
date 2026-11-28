@@ -75,7 +75,7 @@ namespace HvacAiCadAddin.Commands
             RouteDraftSettings settings;
             using (RouteDraftForm form = new RouteDraftForm())
             {
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 settings = form.Settings;
             }

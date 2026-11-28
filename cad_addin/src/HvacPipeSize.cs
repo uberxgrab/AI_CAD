@@ -177,7 +177,7 @@ namespace HvacAiCadAddin.Commands
 
                 editor.WriteMessage("\n" + summary);
                 PipeSizeForm form = new PipeSizeForm(settings, summary, run.Layer);
-                if (Application.ShowModalDialog(form) != System.Windows.Forms.DialogResult.OK)
+                if (DialogHost.ShowModal(form) != System.Windows.Forms.DialogResult.OK)
                     return;
                 kind = form.ChosenKind;
                 size = form.ChosenSize;

@@ -24,6 +24,7 @@
     <ZwMapInput Include="..\..\..\cad_addin\src\OduWriter.cs" Link="OduWriter.cs" />
     <ZwMapInput Include="..\..\..\cad_addin\src\RiserWriter.cs" Link="RiserWriter.cs" />
     <ZwMapInput Include="..\..\..\cad_addin\src\TemplateImport.cs" Link="TemplateImport.cs" />
+    <ZwMapInput Include="..\..\..\cad_addin\src\TestMode.cs" Link="TestMode.cs" />
     <Reference Include="ZwManaged">
       <HintPath>$(ZwDir)\ZwManaged.dll</HintPath>
       <Private>False</Private>
