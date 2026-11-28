@@ -9,6 +9,8 @@
     <PlatformTarget>x64</PlatformTarget>
     <Prefer32Bit>false</Prefer32Bit>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- The ZWCAD build (HvacAiCadAddin.Zw.csproj) keeps its mapped sources and output here. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\Zw\**;bin\Zw\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <!-- Sets $(AcadDir): the installed AutoCAD whose managed DLLs are referenced. -->

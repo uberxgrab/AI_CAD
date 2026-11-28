@@ -1,0 +1,57 @@
+<Project>
+  <!--
+    AutoCAD -> ZWCAD source mapping. ZWCAD's .NET API mirrors AutoCAD's, only the namespaces differ
+    (Autodesk.AutoCAD.* -> ZwSoft.ZwCAD.*, Autodesk.Windows -> ZwSoft.Windows). The sources stay
+    AutoCAD-first: every item in ZwMapInput is copied to $(ZwGenDir)<Link> with that textual swap
+    and the copy is compiled instead. Each copy starts with a #line directive, so compiler
+    messages and stack traces point at the ORIGINAL file and line. A copy is only rewritten when
+    its content changes, which keeps incremental builds incremental.
+
+    Set before importing this file:
+      ZwGenDir    folder (with trailing backslash) that receives the mapped copies, outside any
+                  folder another project globs
+      ZwMapInput  items to map; each needs a Link (the relative path inside ZwGenDir)
+  -->
+  <UsingTask TaskName="ZwMapSources" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Sources ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <GenDir ParameterType="System.String" Required="true" />
+      <Written ParameterType="System.Int32" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        int written = 0;
+        foreach (var item in Sources)
+        {
+            string src = item.GetMetadata("FullPath");
+            string link = item.GetMetadata("Link");
+            if (string.IsNullOrEmpty(link)) link = item.GetMetadata("Filename") + item.GetMetadata("Extension");
+            string dest = Path.Combine(GenDir, link);
+            string text = File.ReadAllText(src);
+            text = text.Replace("Autodesk.AutoCAD", "ZwSoft.ZwCAD").Replace("Autodesk.Windows", "ZwSoft.Windows");
+            text = "#line 1 \"" + src.Replace("\\", "\\\\") + "\"\r\n" + text;
+            if (File.Exists(dest) && File.ReadAllText(dest) == text) continue;
+            Directory.CreateDirectory(Path.GetDirectoryName(dest));
+            File.WriteAllText(dest, text, new UTF8Encoding(true));
+            written++;
+        }
+        Written = written;
+]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- Nothing is compiled from ZwMapInput itself, only its mapped copies. -->
+  <ItemGroup>
+    <Compile Include="@(ZwMapInput->'$(ZwGenDir)%(Link)')" />
+  </ItemGroup>
+
+  <Target Name="ZwMapSources" BeforeTargets="CoreCompile;_GenerateCompileDependencyCache">
+    <ZwMapSources Sources="@(ZwMapInput)" GenDir="$(ZwGenDir)">
+      <Output TaskParameter="Written" PropertyName="ZwMappedCount" />
+    </ZwMapSources>
+    <Message Importance="high" Text="ZWCAD source mapping: @(ZwMapInput->Count()) files, $(ZwMappedCount) rewritten in $(ZwGenDir)" />
+  </Target>
+</Project>

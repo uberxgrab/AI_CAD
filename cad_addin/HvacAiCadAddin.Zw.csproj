@@ -1,0 +1,60 @@
+<Project>
+  <!--
+    The same add-in, built for ZWCAD 2026 (managed API ZwManaged / ZwDatabaseMgd). It compiles the
+    unchanged sources of src\ after the namespace mapping in ZwMap.targets, so cad_addin\src stays
+    AutoCAD-first. Output: bin\Zw\<Configuration>\net48\HvacAiCadAddin.dll; intermediates and the
+    mapped sources: obj\Zw\ (both folders are git-ignored and excluded from the AutoCAD project).
+
+      dotnet build cad_addin\HvacAiCadAddin.Zw.csproj -p:Configuration=Debug -p:Platform=x64 [-p:ZwDir=D:\ZWCAD]
+  -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj\Zw\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)bin\Zw\</BaseOutputPath>
+  </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>HvacAiCadAddin</RootNamespace>
+    <AssemblyName>HvacAiCadAddin</AssemblyName>
+    <LangVersion>7.3</LangVersion>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
+    <DefineConstants>$(DefineConstants);ZWCAD</DefineConstants>
+    <ZwGenDir>$(MSBuildThisFileDirectory)obj\Zw\gen\</ZwGenDir>
+  </PropertyGroup>
+
+  <!-- Sets $(ZwDir): the installed ZWCAD whose managed DLLs are referenced. -->
+  <Import Project="ZwDir.props" />
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <StartAction>Program</StartAction>
+    <StartProgram>$(ZwDir)\ZWCAD.exe</StartProgram>
+    <StartArguments>/b "$(MSBuildThisFileDirectory)start_zw.scr"</StartArguments>
+    <StartWorkingDirectory>$(ZwDir)</StartWorkingDirectory>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ZwMapInput Include="src\**\*.cs" Link="%(RecursiveDir)%(Filename)%(Extension)" />
+    <Reference Include="ZwManaged">
+      <HintPath>$(ZwDir)\ZwManaged.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="ZwDatabaseMgd">
+      <HintPath>$(ZwDir)\ZwDatabaseMgd.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="ZwMap.targets" />
+</Project>

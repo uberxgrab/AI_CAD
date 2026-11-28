@@ -1,0 +1,15 @@
+<Project>
+  <!--
+    Picks the ZWCAD install whose managed DLLs (ZwManaged, ZwDatabaseMgd) are referenced.
+    Default D:\ZWCAD; override with  dotnet build ... "-p:ZwDir=C:\Program Files\ZWSOFT\ZWCAD 2026"
+    Imported by cad_addin\HvacAiCadAddin.Zw.csproj and the ZWCAD test projects under tests\Zw.
+  -->
+  <PropertyGroup>
+    <ZwDir Condition="'$(ZwDir)' == ''">D:\ZWCAD</ZwDir>
+  </PropertyGroup>
+
+  <Target Name="CheckZwDir" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(ZwDir)\ZwManaged.dll')"
+           Text="ZWCAD managed DLLs not found in '$(ZwDir)'. Install ZWCAD 2026 or pass -p:ZwDir=&quot;&lt;ZWCAD folder&gt;&quot;." />
+  </Target>
+</Project>
