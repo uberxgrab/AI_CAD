@@ -1106,6 +1106,22 @@ dotnet run --project tests\HvacQtoCoreTests\HvacQtoCoreTests.csproj -c Debug
    `%TEMP%\HvacQtoCoreTests`, so no `bin/` or `obj/` appears in the repo. The run
    exits non-zero if any check fails.
 
+ZWCAD 2026 (see `CLAUDE.md`, section "ZWCAD", for the verified facts): the same add-in is
+built for ZWCAD by `cad_addin\HvacAiCadAddin.Zw.csproj`, which compiles namespace-swapped
+copies of `cad_addin\src` (the sources stay AutoCAD-first, so write AutoCAD code only):
+
+```powershell
+dotnet build cad_addin\HvacAiCadAddin.Zw.csproj -p:Configuration=Debug -p:Platform=x64
+powershell -File tests\Zw\run-zw-tests.ps1 [-Suite smoke|writers|all]   # separate ZWCAD.exe per suite
+powershell -File tests\run-core-tests.ps1                                # every AutoCAD-free core test
+powershell -File cad_addin\register-zwcad.ps1 [-Unregister]               # per-user autoload (HKCU)
+```
+
+Never close or send input to a ZWCAD, `acad.exe` or Excel process you did not start; the
+ZWCAD runner stops only the process id it launched. New source files in `cad_addin\src` are
+picked up by the Zw project automatically; a new test file or linked source needs adding to
+BOTH the accoreconsole test project and its `tests\Zw\Zw*Tests` twin.
+
 ## Coding Style & Naming Conventions
 
 Use Python 4-space indentation, `snake_case` functions and variables,

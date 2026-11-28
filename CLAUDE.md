@@ -55,6 +55,13 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
     `tests/PipeCoreTests/Check.cs`. Same rule. `tests/UnitCoreTests/Acad/` (no run
     script yet) and `tests/OduRiserCoreTests/Acad/run-tests.ps1 -WorkDwg <copy>` are
     headless accoreconsole tests of the writers.
+  - `tests/Zw/`: tests that run inside ZWCAD 2026 (no headless ZWCAD exists, so a separate
+    `ZWCAD.exe` instance per suite). `run-zw-tests.ps1` builds and runs them. `ZwSmokeTests`
+    is native ZWCAD code (load check, `HVACZWSMOKE`, the drawing providers and
+    `HVACZWFINISH`); `ZwDuctTests`, `ZwUnitTests`, `ZwOduRiserTests` and `ZwNormTests` link the
+    SAME test files and `cad_addin\src` files as the accoreconsole projects above (same item
+    lists; keep them in step) through the namespace mapping, so no test code is forked.
+    `tests/run-core-tests.ps1` runs every AutoCAD-free C# core test project and summarises.
   - `mcp_server.py` + `aitools/`: AI plan Phase 1, an MCP server (mcp 2.x:
     `MCPServer` from `mcp.server.mcpserver`, not v1 `FastMCP`; stdio, never print to
     stdout) with tools `list_drawings`, `convert_dwg` (accoreconsole on a copy,
@@ -93,6 +100,10 @@ Foundation for an MEP design-assistance toolkit, focused first on HVAC:
   - `src/`: all AutoCAD API calls and CAD UI.
   - `python_bridge.py`: read-only add-in and AutoCAD discovery helper.
   - `start.scr`: `NETLOAD` script used when debugging.
+  - `HvacAiCadAddin.Zw.csproj`, `ZwDir.props`, `ZwMap.targets`, `start_zw.scr`,
+    `register-zwcad.ps1`: the same add-in built for ZWCAD 2026 (see the "ZWCAD" section).
+    `src/` stays AutoCAD-first; the Zw project compiles namespace-swapped copies of it from
+    `obj\Zw\gen\` into `bin\Zw\Debug\net48\`. The AutoCAD csproj excludes `obj\Zw` and `bin\Zw`.
 - `docs/SESSION_HANDOFF.md`: summary of past Claude sessions, user decisions, work
   in progress, and setup on a new machine. Read it when resuming work.
 - `docs/AI_MCP_PLAN.md`: the 4-phase plan for AI on top of the commands (MCP
@@ -328,6 +339,18 @@ dotnet run --project tests\DuctCoreTests\DuctCoreTests.csproj -c Debug
 
 # Run the headless duct tests in accoreconsole on template copies (exit 0 = all pass)
 powershell -File tests\DuctAcadTests\run-tests.ps1 [-TimeoutSec 600] [-NoBuild]
+
+# Every AutoCAD-free C# core test project, with a summary table (exit 0 = all pass)
+powershell -File tests\run-core-tests.ps1 [-Only Duct,Norm]
+
+# ZWCAD 2026: build the add-in (D:\ZWCAD by default; -p:ZwDir=... picks another install)
+dotnet build cad_addin\HvacAiCadAddin.Zw.csproj -p:Configuration=Debug -p:Platform=x64
+
+# ZWCAD 2026: smoke test and the writer suites, each in its own ZWCAD.exe instance (exit 0 = all pass)
+powershell -File tests\Zw\run-zw-tests.ps1 [-Suite smoke|writers|all] [-ZwDir D:\ZWCAD] [-TimeoutSec 300] [-NoBuild]
+
+# ZWCAD 2026: autoload the add-in for the current user (HKCU only), or remove that again
+powershell -File cad_addin\register-zwcad.ps1 [-Dll <path>] [-Unregister]
 ```
 
 `main.py` also accepts `--features` and `--feedback-template` for JSONL exports.
@@ -430,6 +453,46 @@ Each of these was checked in `accoreconsole` on a copy of `CAD/MEP_DWT_3.dwg`.
   Use endpoint-distance checks with an explicit tolerance instead.
 - **Undo.** One command is one undo group, however many transactions it commits.
 
+## ZWCAD 2026
+
+The add-in also builds and runs on ZWCAD 2026 Professional (`D:\ZWCAD`, `ZWCAD.exe` 26.31). Facts
+below were checked on 2026-11-28 by `tests\Zw\run-zw-tests.ps1`; "unverified" is marked.
+
+- **Same sources, other namespaces.** ZWCAD's .NET API mirrors AutoCAD 2024's under
+  `ZwSoft.ZwCAD.*` (`ZwManaged.dll`, `ZwDatabaseMgd.dll`; `ZwSoft.Windows` for the ribbon). All of
+  `cad_addin\src` compiles against it with only that textual swap (0 errors, 0 warnings, no
+  renames). `ZwMap.targets` (inline MSBuild task) writes the swapped copies, each starting with a
+  `#line` directive so errors and stack traces name the ORIGINAL file and line, to `obj\Zw\gen\`.
+  `DefineConstants` gets `ZWCAD`, but no source needs a `#if ZWCAD` yet. `ZwManaged.dll` is
+  mixed-mode, so it loads only inside ZWCAD (reflection-only tools work outside).
+- **Runtime.** ZWCAD loads the net48 add-in: CLR 4.0.30319 / .NET Framework 4.8, 64-bit. `Application.Version`
+  26.0.26.0, `VERNUM` 26.31, `ACADVER` reports 20.0 (do not branch on `ACADVER`). A scripted
+  `NETLOAD` from `ZWCAD.exe /b run.scr` raised no security or trust prompt with the user's profile.
+  All 18 `[CommandMethod]` names load; `HVACCOUNT` runs through `Editor.Command`. The other commands
+  are only checked by reflection (they ask for input); their jigs, previews, dialogs and picking are
+  UNVERIFIED on ZWCAD, as on AutoCAD.
+- **Verified equal to AutoCAD:** `Table` DXF name is `ACAD_TABLE` (so `RiserWriter` needs no shim);
+  `TransientManager.CurrentTransientManager` exists; `Document.SendStringToExecute` exists; a side
+  `Database` reads a copy of `MEP_DWT_3.dwg` (1012 blocks) and `REC_600x300` is a dynamic block.
+- **Differences found.** `Utils.IsCommandDefined`, `IsCommandNameInUse` and `IsCoreCommand` answer
+  False even for `LINE`, so they cannot prove a command is registered. A drawing with missing SHX
+  fonts opens with a modal "Missing SHX Files" dialog (see Known pitfalls). `ZWCAD.exe` exits with
+  code 1 after `Application.Quit()`, and after `NORMTEST` ZWCAD does not leave by itself: the process
+  stays alive with no window and no child process (not caused by `WblockCloneObjects` + `DxfOut` or by
+  starting `python.exe`, both tried alone; cause unknown), so the runner stops its own pid 25 s after the
+  suite finished. The suite results are already in the log by then.
+- **Test method.** One `ZWCAD.exe /b run.scr` instance per suite. `ZwSmokeTests.dll` (native ZWCAD code)
+  is loaded first: `HVACZWUSEWORKDWG` (side database from the template copy, made the working
+  database), `HVACZWMAKEROOMS` (a synthetic `HVACROOMS` result: 5 rooms and a shaft on `HVAC-ROOM`
+  with `HVACAI_ROOM` xdata, since `UnitAcadTests` needs one), `HVACZWFINISH` (done marker,
+  `CloseAndDiscard`, `Application.Quit()`). Because suites run on side databases, ZWCAD document
+  behaviour (Undo across commands, `LockDocument`, `MdiActiveDocument.Editor`) is not exercised.
+- **Results** (ZWCAD 2026, 2026-11-28): smoke 16/16, duct 516/516, unit 28/28, oduriser 33/33,
+  norm 37/37 (`NORMTEST` 22 and `DUCTLINETEST` 15). No assertion was weakened or skipped.
+- **Autoload.** `cad_addin\register-zwcad.ps1` writes `HKCU\Software\ZWSOFT\ZWCAD\2026\en-US\Applications\HvacAiCadAddin`
+  (`LOADER`, `LOADCTRLS` 2, `MANAGED` 1). It was written but NOT run during development.
+  `start_zw.scr` NETLOADs `bin\Zw\Debug\net48\HvacAiCadAddin.dll` for the Visual Studio start action.
+
 ## Known pitfalls
 
 - **DWG input is rejected.** `parser.load_dxf` raises on `.dwg`, and ezdxf cannot
@@ -451,6 +514,18 @@ Each of these was checked in `accoreconsole` on a copy of `CAD/MEP_DWT_3.dwg`.
   `RP` are not copper, and text in parentheses is ignored.
 - **A loaded add-in cannot be replaced.** AutoCAD keeps a `NETLOAD`ed assembly until
   it exits. Restart AutoCAD before loading a rebuilt DLL.
+- **There is no headless ZWCAD.** `tests\Zw\run-zw-tests.ps1` starts a separate `ZWCAD.exe`
+  (own process id, never the user's instance) with the USER'S ZWCAD profile and settings, so
+  it shows a window for the length of each suite and depends on that profile. It NETLOADs DLL
+  copies from `%TEMP%\HvacAiZwTests\<timestamp>\`.
+- **ZWCAD locks the add-in DLL.** With the `register-zwcad.ps1` autoload key set, a running
+  ZWCAD holds `bin\Zw\...\HvacAiCadAddin.dll`, so a rebuild fails until ZWCAD exits (register a
+  copy with `-Dll` instead). A test instance would also load the add-in a second time from that
+  key; the runner warns, and the smoke check "loaded exactly once" fails.
+- **ZWCAD blocks on "Missing SHX Files".** Opening the template (or any drawing with missing
+  fonts) as a document shows a modal dialog that stops a script. Tests read such drawings into
+  a side `Database` and set `HostApplicationServices.WorkingDatabase` instead (the
+  `HVACZWUSEWORKDWG` helper). No dialog or system variable was changed to avoid it.
 - **`out/` is tracked.** `.gitignore` excludes `cad_addin/bin/`, `cad_addin/obj/`,
   `.tmp_test_runs/`, `__pycache__/`, and `venv/`, but the four sample reports in
   `out/` are still in git. Running the CLI overwrites them, so check `git status`
