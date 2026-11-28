@@ -2,9 +2,9 @@
 	"mcpServers": {
 		"hvac-cad": {
 			"type": "stdio",
-			"command": "C:\\Users\\Admin\\AI_CAD\\venv\\Scripts\\python.exe",
+			"command": "C:\\Users\\Admin\\hvac_ai\\venv\\Scripts\\python.exe",
 			"args": [
-				"C:\\Users\\Admin\\AI_CAD\\mcp_server.py"
+				"C:\\Users\\Admin\\hvac_ai\\mcp_server.py"
 			],
 			"tools": [
 				"*"

@@ -21,10 +21,12 @@ git.
   `git push origin --tags`.
 
 ### Trên máy mới
-1. Clone repo. Máy hiện tại dùng `C:\Users\Admin\AI_CAD`. `start.scr` và
-   `StartArguments` trong `.csproj` vẫn gắn cứng đường dẫn cũ `C:\Users\Admin\hvac_ai`.
+1. Clone repo vào **đúng** `C:\Users\Admin\hvac_ai` (quyết định ngày 2026-11-28).
+   `.mcp.json`, `start.scr` và `StartArguments` trong `.csproj` gắn cứng đường dẫn này.
+   Máy cũ đang để repo ở `C:\Users\Admin\AI_CAD`: sau khi pull, đổi tên thư mục thành
+   `C:\Users\Admin\hvac_ai` rồi tạo lại `venv` (bước 4).
    ```powershell
-   git clone https://github.com/uberxgrab/AI_CAD.git C:\Users\Admin\AI_CAD
+   git clone https://github.com/uberxgrab/AI_CAD.git C:\Users\Admin\hvac_ai
    ```
 2. Cài AutoCAD 2021–2024 (add-in build cho .NET Framework 4.8; **AutoCAD 2025 trở lên
    dùng .NET 8 nên không nạp được add-in này**), .NET SDK có targeting pack .NET
@@ -32,7 +34,7 @@ git.
    tự 2023 → 2021 → 2024; muốn chọn bản khác thì thêm `-p:AcadDir="..."`.
 3. Nếu repo nằm trong thư mục người dùng khác (máy hiện tại: repo ở `C:\Users\Admin`,
    tài khoản là `pc`) thì phải cấp quyền ghi, chạy PowerShell **Run as Administrator**:
-   `icacls "C:\Users\Admin\AI_CAD" /grant "pc:(OI)(CI)M" /T`.
+   `icacls "C:\Users\Admin\hvac_ai" /grant "pc:(OI)(CI)M" /T`.
 4. Tạo môi trường Python (`requirements.txt` là UTF-16 LE có BOM; đã có `mcp==2.3.0`
    và `matplotlib`):
    ```powershell

@@ -458,6 +458,14 @@ Each of these was checked in `accoreconsole` on a copy of `CAD/MEP_DWT_3.dwg`.
 - **Machine-specific paths.** `start.scr` and the `.csproj` hard-code
   `C:\Users\Admin\hvac_ai`; the `.csproj` takes the AutoCAD folder from `AcadDir`
   (default 2023).
+- **The clone must be at `C:\Users\Admin\hvac_ai` on every machine.** `.mcp.json`
+  (the `hvac-cad` MCP server's `command` and `args`), `start.scr` and the `.csproj`
+  hard-code that path. The older machine still has its clone at
+  `C:\Users\Admin\AI_CAD`. There, after pulling, rename the folder to
+  `C:\Users\Admin\hvac_ai` (close VS Code, AutoCAD and Claude Code first), then
+  recreate `venv`, because a venv breaks when its folder moves. Until then
+  `hvac-cad` fails with `CONNECTION_CLOSED`. Do not change these paths back to
+  `AI_CAD` (user decision, 2026-11-28).
 - **Windows consoles are cp1252.** Python that prints Vietnamese must call
   `sys.stdout.reconfigure(encoding="utf-8")` (the CLIs do), and `python -I` ignores
   `PYTHONIOENCODING`.
